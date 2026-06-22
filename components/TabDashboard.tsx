@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 
 const DAYS_WARN = 90
-function daysUntil(d) {
+function daysUntil(d: string) {
   return Math.ceil((new Date(d).getTime() - Date.now()) / 86400000)
 }
 const thMonth = {
