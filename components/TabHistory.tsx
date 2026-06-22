@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 
-function exportCSV(type, item, rows, lotRemain) {
+function exportCSV(type: string, item: string, rows: any[], lotRemain: any[]) {
   const lines = []
   lines.push('"Stock Card น้ำยา — SPLABSTOCK"')
   lines.push('"ประเภท","'+type+'"')
