@@ -17,8 +17,6 @@ export default function TabVendor() {
   const [summary, setSummary] = useState([])
   const [sel, setSel] = useState(null)
   const [loading, setLoading] = useState(true)
-
-  // popup state
   const [modalBill, setModalBill] = useState(null)
   const [scores, setScores] = useState({})
   const [note, setNote] = useState('')
@@ -30,7 +28,10 @@ export default function TabVendor() {
   async function loadAll() {
     setLoading(true)
     const [{ data: receipts }, { data: scoresData }, { data: summaryData }] = await Promise.all([
-      supabase.from('receipts').select('vendor_id,invoice_no,date,type,item,qty,unit,vendors(name)').not('vendor_id','is',null).not('invoice_no','like','UNKNOWN-%').order('date',{ascending:false}),
+      supabase.from('receipts').select('vendor_id,invoice_no,date,type,item,qty,unit,vendors(name)')
+        .not('vendor_id','is',null)
+        .not('invoice_no','like','UNKNOWN-%')
+        .order('date',{ascending:false}),
       supabase.from('vendor_scores').select('vendor_id,invoice_no'),
       supabase.from('vendor_score_summary').select('*'),
     ])
@@ -60,22 +61,14 @@ export default function TabVendor() {
   }
 
   function openModal(bill) {
-    setModalBill(bill)
-    setScores({})
-    setNote('')
-    setSaveMsg(null)
-  }
-
-  function closeModal() {
-    setModalBill(null)
+    setModalBill(bill); setScores({}); setNote(''); setSaveMsg(null)
   }
 
   const scoredAll = SCORE_LABELS.every(l => scores[l.key])
+  const totalScore = SCORE_LABELS.reduce((s,l) => s+(scores[l.key]||0), 0)
 
   async function handleSaveEvaluation() {
-    if (!scoredAll) {
-      setSaveMsg({ text:'กรุณาให้คะแนนครบทั้ง 7 ข้อ', ok:false }); return
-    }
+    if (!scoredAll) { setSaveMsg({ text:'กรุณาให้คะแนนครบทั้ง 7 ข้อ', ok:false }); return }
     setSaving(true); setSaveMsg(null)
     const { error } = await supabase.from('vendor_scores').insert({
       vendor_id: modalBill.vendor_id,
@@ -87,15 +80,10 @@ export default function TabVendor() {
       user_name: '',
       note: note || null,
     })
-    if (error) {
-      setSaveMsg({ text:'บันทึกล้มเหลว: '+error.message, ok:false }); setSaving(false); return
-    }
+    if (error) { setSaveMsg({ text:'บันทึกล้มเหลว: '+error.message, ok:false }); setSaving(false); return }
     setSaveMsg({ text:'บันทึกการประเมินสำเร็จ', ok:true })
     setSaving(false)
-    setTimeout(() => {
-      closeModal()
-      loadAll()
-    }, 700)
+    setTimeout(() => { setModalBill(null); loadAll() }, 700)
   }
 
   function gradeClass(g) {
@@ -104,18 +92,14 @@ export default function TabVendor() {
     return 'pill-danger'
   }
 
-  const totalScore = SCORE_LABELS.reduce((s,l) => s+(scores[l.key]||0), 0)
-
   return (
     <div>
-      {/* WAITING LIST */}
       <div className="card" style={{ marginBottom:16 }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
           <h2 style={{ marginBottom:0 }}><i className="ti ti-clock" style={{ color:'var(--bd)' }}></i> รอประเมิน</h2>
           <button className="btn btn-teal" onClick={loadAll}><i className="ti ti-refresh"></i> รีเฟรช</button>
         </div>
         <div style={{ fontSize:12, color:'var(--muted)', marginBottom:16 }}>บิลรับสินค้าที่ยังไม่ได้ประเมินผู้ขาย (1 บิล = 1 ผู้ขาย + 1 เลขที่บิล)</div>
-
         {loading ? (
           <div style={{ textAlign:'center', padding:32, color:'var(--muted)' }}>กำลังโหลด...</div>
         ) : waiting.length === 0 ? (
@@ -124,13 +108,7 @@ export default function TabVendor() {
           <div style={{ overflowX:'auto' }}>
             <table>
               <thead>
-                <tr>
-                  <th>ผู้ขาย</th>
-                  <th>เลขที่บิล</th>
-                  <th>วันที่รับ</th>
-                  <th>รายการในบิล</th>
-                  <th></th>
-                </tr>
+                <tr><th>ผู้ขาย</th><th>เลขที่บิล</th><th>วันที่รับ</th><th>รายการในบิล</th><th></th></tr>
               </thead>
               <tbody>
                 {waiting.map((bill, i) => (
@@ -156,7 +134,6 @@ export default function TabVendor() {
         )}
       </div>
 
-      {/* SUMMARY TABLE */}
       <div className="card" style={{ marginBottom: sel ? 16 : 0 }}>
         <h2><i className="ti ti-chart-bar" style={{ color:'var(--bd)' }}></i> สรุปคะแนนผู้ขาย</h2>
         <div style={{ fontSize:12, color:'var(--muted)', marginBottom:16 }}>เกณฑ์: ≥80% = ดีมาก · 70–79% = ดี · 60–69% = พอใช้ · &lt;60% = ต้องปรับปรุง</div>
@@ -166,9 +143,7 @@ export default function TabVendor() {
           <div style={{ overflowX:'auto' }}>
             <table>
               <thead>
-                <tr>
-                  <th>ผู้ขาย</th><th>จำนวนครั้ง</th><th>คะแนนเฉลี่ย</th><th>%</th><th>ระดับ</th><th></th>
-                </tr>
+                <tr><th>ผู้ขาย</th><th>จำนวนครั้ง</th><th>คะแนนเฉลี่ย</th><th>%</th><th>ระดับ</th><th></th></tr>
               </thead>
               <tbody>
                 {summary.map((v, i) => {
@@ -215,13 +190,12 @@ export default function TabVendor() {
         </div>
       )}
 
-      {/* MODAL */}
       {modalBill && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }} onClick={closeModal}>
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }} onClick={()=>setModalBill(null)}>
           <div className="card" style={{ maxWidth:560, width:'100%', maxHeight:'88vh', overflowY:'auto' }} onClick={e=>e.stopPropagation()}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:4 }}>
               <h2 style={{ color:'var(--pv)', marginBottom:0 }}><i className="ti ti-star"></i> ประเมินผู้ขาย</h2>
-              <button className="btn btn-outline" style={{ padding:'6px 12px' }} onClick={closeModal}><i className="ti ti-x"></i></button>
+              <button className="btn btn-outline" style={{ padding:'6px 12px' }} onClick={()=>setModalBill(null)}><i className="ti ti-x"></i></button>
             </div>
             <div style={{ background:'var(--pb)', borderRadius:14, padding:'12px 14px', marginBottom:16, marginTop:10 }}>
               <div style={{ fontSize:14, fontWeight:800, color:'var(--pv)' }}>{modalBill.vendor_name}</div>
@@ -232,7 +206,6 @@ export default function TabVendor() {
                 ))}
               </div>
             </div>
-
             <div style={{ fontSize:12, color:'var(--muted)', marginBottom:14 }}>ให้คะแนน 1–5 (5=ดีมาก) ทั้ง 7 ข้อ</div>
             {SCORE_LABELS.map(l=>(
               <div key={l.key} style={{ background:'var(--pb)', borderRadius:14, padding:'12px 14px', marginBottom:10 }}>
@@ -244,14 +217,11 @@ export default function TabVendor() {
                 </div>
               </div>
             ))}
-
             <div style={{ marginTop:4, marginBottom:14 }}>
               <div className="field-label">หมายเหตุ / ปัญหาที่พบ</div>
               <textarea placeholder="พิมพ์รายละเอียด (ถ้ามี)" value={note} onChange={e=>setNote(e.target.value)}/>
             </div>
-
             {saveMsg && <div className={'pill '+(saveMsg.ok?'pill-ok':'pill-danger')} style={{ display:'block', marginBottom:12, padding:'10px 14px', fontSize:12 }}>{saveMsg.text}</div>}
-
             <button className="btn btn-purple" style={{ width:'100%', justifyContent:'center' }} onClick={handleSaveEvaluation} disabled={saving}>
               <i className="ti ti-device-floppy"></i> {saving?'กำลังบันทึก...':'บันทึกการประเมิน ('+totalScore+'/35)'}
             </button>
