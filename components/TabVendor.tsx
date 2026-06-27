@@ -30,7 +30,7 @@ export default function TabVendor() {
   async function loadAll() {
     setLoading(true)
     const [{ data: receipts }, { data: scoresData }, { data: summaryData }] = await Promise.all([
-      supabase.from('receipts').select('vendor_id,invoice_no,date,type,item,qty,unit,vendors(name)').not('vendor_id','is',null).order('date',{ascending:false}),
+      supabase.from('receipts').select('vendor_id,invoice_no,date,type,item,qty,unit,vendors(name)').not('vendor_id','is',null).not('invoice_no','like','UNKNOWN-%').order('date',{ascending:false}),
       supabase.from('vendor_scores').select('vendor_id,invoice_no'),
       supabase.from('vendor_score_summary').select('*'),
     ])
