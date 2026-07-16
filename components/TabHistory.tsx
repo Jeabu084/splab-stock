@@ -33,7 +33,7 @@ export default function TabHistory() {
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
-    supabase.from('master_items').select('type,item').order('type').order('item').then(({data})=>{
+    supabase.from('master_items').select('type,item').eq('is_hidden',false).order('type').order('item').then(({data})=>{
       if (!data) return
       const map = {}
       data.forEach(r=>{ if (!map[r.type]) map[r.type]=[]; map[r.type].push(r.item) })

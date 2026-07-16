@@ -14,7 +14,7 @@ export default function TabOverview() {
   async function loadData() {
     setLoading(true)
     const [{ data: master }, { data: bal }] = await Promise.all([
-      supabase.from('master_items').select('type,item').order('type').order('item'),
+      supabase.from('master_items').select('type,item').eq('is_hidden',false).order('type').order('item'),
       supabase.from('stock_balance').select('type,item,lot,expire,balance').order('type').order('item').order('expire'),
     ])
     if (!master) { setLoading(false); return }

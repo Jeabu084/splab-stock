@@ -38,7 +38,7 @@ export default function TabHome() {
   useEffect(() => {
     supabase.from('vendors').select('id,name').eq('is_active',true).order('name')
       .then(({data}) => setVendors(data||[]))
-    supabase.from('master_items').select('type,item,unit').order('type').order('item')
+    supabase.from('master_items').select('type,item,unit').eq('is_hidden',false).order('type').order('item')
       .then(({data}) => {
         if (!data) return
         const map = {}; const um = {}

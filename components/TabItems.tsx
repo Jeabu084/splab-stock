@@ -34,7 +34,7 @@ export default function TabItems() {
   async function loadData() {
     setLoading(true)
     const [{ data: master }, { data: bal }, { data: receipts }] = await Promise.all([
-      supabase.from('master_items').select('type,item,unit').order('type').order('item'),
+      supabase.from('master_items').select('type,item,unit').eq('is_hidden',false).order('type').order('item'),
       supabase.from('stock_balance').select('type,item,lot,expire,balance').order('type').order('item').order('expire'),
       supabase.from('receipts').select('type,item,unit,unit_price,date').order('date',{ascending:false}),
     ])
