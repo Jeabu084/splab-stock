@@ -58,7 +58,7 @@ export default function TabUsage() {
 
     const [{ data: master }, { data: issues }] = await Promise.all([
       supabase.from('master_items').select('type,item').eq('is_hidden',false).order('type').order('item'),
-      supabase.from('issues').select('type,item,date,qty').gte('date', start).lte('date', end),
+      supabase.from('issues').select('type,item,date,qty').order('date'),
     ])
     if (!master) { setLoading(false); return }
 
