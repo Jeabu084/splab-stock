@@ -92,7 +92,7 @@ export default function TabUsage() {
     const usageMap = {}
     ;(issues||[]).forEach(r => {
       const k = r.type+'||'+r.item
-      const m = Number(String(r.date).slice(5,7))
+      const m = new Date(r.date).getUTCMonth() + 1
       if (!usageMap[k]) usageMap[k] = {}
       usageMap[k][m] = (usageMap[k][m]||0) + Number(r.qty)
     })
