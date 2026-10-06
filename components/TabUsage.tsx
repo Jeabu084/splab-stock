@@ -39,7 +39,7 @@ export default function TabUsage(){
     const bt={}
     master.forEach(m=>{const k=m.type+'||'+m.item;const md=umap[k]||{};const months=FY_MONTHS.map(mn=>md[mn]||0);const total=months.reduce((s,v)=>s+v,0);const avg=Math.round((total/el)*10)/10;if(!bt[m.type])bt[m.type]=[];bt[m.type].push({item:m.item,months,total,avg})})
     setGrouped(Object.keys(bt).sort().map(type=>({type,items:bt[type]})))
-    setLoading(false)
+    setLoading(false); if(typeof window !== 'undefined' && window.location.hostname !== 'localhost') console.warn('TabUsage v2 loaded, issues count:', issues?.length)
   }
   return(<div><div className="card">
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6,flexWrap:'wrap',gap:10}}>
