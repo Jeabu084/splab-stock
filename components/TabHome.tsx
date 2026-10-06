@@ -199,7 +199,12 @@ export default function TabHome() {
           {/* แถว 2: เลขที่บิล + อุณหภูมิ */}
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
             <div><div className="field-label">เลขที่บิล / Invoice *</div><input placeholder="INV-2025-001" value={rForm.invoice_no} onChange={e=>rSet('invoice_no',e.target.value)}/></div>
-            <div><div className="field-label">อุณหภูมิขณะรับ *</div><input placeholder="เช่น 2-8°C, Ambient" value={rForm.temperature} onChange={e=>rSet('temperature',e.target.value)}/></div>
+            <div><div className="field-label">อุณหภูมิขณะรับ *</div>
+              <select value={rForm.temperature} onChange={e=>rSet('temperature',e.target.value)}>
+                <option value="">— เลือกอุณหภูมิ —</option>
+                {['2-8°C','-20°C','RT'].map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
           </div>
 
           {/* แถว 3: ประเภท + รายการ */}
