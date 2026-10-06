@@ -16,6 +16,31 @@ function currentFY() {
   return m >= 10 ? y + 1 : y
 }
 
+// ช่วงเดือนแรกของปีงบ (ต.ค.) ข้อมูลปีงบใหม่ยังน้อย ให้เปิดปีงบที่แล้วเป็นค่าเริ่มต้น
+function defaultFY() {
+  const cur = currentFY()
+  return new Date().getMonth() + 1 === 10 ? cur - 1 : cur
+}
+
+// Supabase คืนได้สูงสุด 1000 แถวต่อ request จึงต้องดึงทีละหน้า
+async function fetchIssues(start, end) {
+  const all = []
+  const PAGE = 1000
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('issues')
+      .select('type,item,date,qty')
+      .gte('date', start)
+      .lt('date', end)
+      .order('date')
+      .range(from, from + PAGE - 1)
+    if (error || !data) break
+    all.push(...data)
+    if (data.length < PAGE) break
+  }
+  return all
+}
+
 const esc = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"'
 
 function exportCSV(grouped, fy) {
@@ -34,7 +59,7 @@ function exportCSV(grouped, fy) {
 }
 
 export default function TabUsage() {
-  const [fy, setFy] = useState(currentFY())
+  const [fy, setFy] = useState(defaultFY())
   const [fyList, setFyList] = useState([])
   const [grouped, setGrouped] = useState([])
   const [loading, setLoading] = useState(true)
@@ -46,9 +71,9 @@ export default function TabUsage() {
     setLoading(true)
     const { start, end } = fyDateRange(fiscalYear)
 
-    const [{ data: master }, { data: issues }] = await Promise.all([
+    const [{ data: master }, issues] = await Promise.all([
       supabase.from('master_items').select('type,item').eq('is_hidden',false).order('type').order('item'),
-      supabase.from('issues').select('type,item,date,qty'),
+      fetchIssues(start, end),
     ])
     if (!master) { setLoading(false); return }
 
@@ -69,12 +94,12 @@ export default function TabUsage() {
     let el = 12
     if (fiscalYear === cur) {
       const s = new Date(String(fiscalYear-1)+'-10-01')
-      el = Math.min(12, Math.max(1, Math.ceil((now - s) / (1000*60*60*24*30.44))))
+      el = Math.min(12, Math.max(1, Math.ceil((now.getTime() - s.getTime()) / (1000*60*60*24*30.44))))
     }
     setElapsed(el)
 
     const umap = {}
-    ;(issues||[]).forEach(r => {
+    issues.forEach(r => {
       const d = String(r.date).slice(0,10)
       if (d < start || d >= end) return
       const k = r.type+'||'+r.item
