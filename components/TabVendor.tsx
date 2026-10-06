@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { getSession } from '@/lib/auth'
+import VendorAnnualEval from '@/components/VendorAnnualEval'
 
 const SCORE_LABELS = [
   { key: 'score_delivery',  label: '1. ความถูกต้องในการจัดส่งสินค้าและราคา' },
@@ -22,6 +24,9 @@ export default function TabVendor() {
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState(null)
+  const [user, setUser] = useState(null)
+
+  useEffect(() => { setUser(getSession()) }, [])
 
   useEffect(() => { loadAll() }, [])
 
@@ -93,7 +98,7 @@ export default function TabVendor() {
   }
 
   return (
-    <div>
+    <div className="vendor-root">
       <div className="card" style={{ marginBottom:16 }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
           <h2 style={{ marginBottom:0 }}><i className="ti ti-clock" style={{ color:'var(--bd)' }}></i> รอประเมิน</h2>
@@ -189,6 +194,10 @@ export default function TabVendor() {
           })}
         </div>
       )}
+
+      <div className="vendor-annual-host">
+        <VendorAnnualEval isAdmin={user?.role==='admin'} userName={user?.full_name} />
+      </div>
 
       {modalBill && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }} onClick={()=>setModalBill(null)}>
