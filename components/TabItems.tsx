@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 
 const DAYS_WARN = 90
@@ -45,6 +45,16 @@ export default function TabItems() {
   const [types, setTypes] = useState([])
   const [typeFilter, setTypeFilter] = useState([])
   const [search, setSearch] = useState('')
+  const [typeOpen, setTypeOpen] = useState(false)
+  const typeRef = useRef(null)
+
+  // ปิด dropdown ประเภทเมื่อคลิกข้างนอก
+  useEffect(() => {
+    if (!typeOpen) return
+    const close = (e) => { if (typeRef.current && !typeRef.current.contains(e.target)) setTypeOpen(false) }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [typeOpen])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState([])
 
@@ -134,14 +144,33 @@ export default function TabItems() {
         </div>
         <div className="no-print" style={{ fontSize:12, color:'var(--muted)', marginBottom:16 }}>ค้นหา กรองตามประเภท หรือ export ข้อมูลรายการน้ำยาทั้งหมด</div>
 
-        <div className="no-print type-chips">
-          <span className="chip-label">ประเภท</span>
-          <button className={'type-chip'+(typeFilter.length===0?' on':'')} onClick={()=>setTypeFilter([])}>ทั้งหมด</button>
-          {types.map(t=>(
-            <button key={t} className={'type-chip'+(typeFilter.includes(t)?' on':'')} onClick={()=>toggle(setTypeFilter,t)}>
-              {typeFilter.includes(t) && <i className="ti ti-check"></i>} {t}
+        <div className="no-print" style={{ display:'flex', gap:10, marginBottom:12, flexWrap:'wrap', alignItems:'center' }}>
+          <div className="type-dd" ref={typeRef}>
+            <button className={'type-dd-btn'+(typeFilter.length?' on':'')} onClick={()=>setTypeOpen(o=>!o)}>
+              <span className="type-dd-text">
+                {typeFilter.length===0 ? 'ทุกประเภท' : typeFilter.length===1 ? typeFilter[0] : typeFilter[0]+' +'+(typeFilter.length-1)}
+              </span>
+              <i className={'ti ti-chevron-'+(typeOpen?'up':'down')}></i>
             </button>
-          ))}
+            {typeOpen && (
+              <div className="type-dd-menu">
+                <div className="type-dd-head">
+                  <span>เลือกได้หลายประเภท</span>
+                  {typeFilter.length>0 && <button onClick={()=>setTypeFilter([])}>ล้าง</button>}
+                </div>
+                {types.map(t=>{
+                  const on = typeFilter.includes(t)
+                  return (
+                    <div key={t} className={'type-dd-opt'+(on?' on':'')} onClick={()=>toggle(setTypeFilter,t)}>
+                      <span className="type-dd-box">{on && <i className="ti ti-check"></i>}</span>
+                      {t}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="ค้นหารายการ..." style={{ flex:1, minWidth:200 }}/>
         </div>
 
         <div className="no-print type-chips">
@@ -155,9 +184,6 @@ export default function TabItems() {
           ))}
         </div>
 
-        <div className="no-print" style={{ display:'flex', gap:10, marginBottom:16, flexWrap:'wrap', alignItems:'center' }}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="ค้นหารายการ..." style={{ flex:1, minWidth:200 }}/>
-        </div>
 
         <div className="no-print" style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
           <button className="btn btn-teal" onClick={loadData}><i className="ti ti-refresh"></i> รีเฟรช</button>
@@ -231,7 +257,19 @@ export default function TabItems() {
           .type-chip { display:inline-flex; align-items:center; gap:5px; border:1.5px solid var(--border); background:#fff; color:var(--muted); border-radius:99px; padding:8px 16px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; transition:all .15s; }
           .type-chip:hover { border-color:#B07A00; color:#B07A00; }
           .type-chip.on { background:#FFF6E0; border-color:#FFC247; color:#B07A00; }
-          .type-chips { align-items:center; }
+          .type-chips { align-items:center; margin-bottom:16px; }
+          .type-dd { position:relative; }
+          .type-dd-btn { display:flex; align-items:center; justify-content:space-between; gap:10px; height:52px; min-width:220px; max-width:320px; padding:0 15px; background:var(--bg); border:1.5px solid var(--border); border-radius:12px; font-size:15px; font-weight:600; color:var(--text); cursor:pointer; font-family:inherit; }
+          .type-dd-btn.on { background:#FFF6E0; border-color:#FFC247; color:#B07A00; font-weight:700; }
+          .type-dd-text { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+          .type-dd-menu { position:absolute; top:calc(100% + 6px); left:0; z-index:50; background:#fff; border:1.5px solid var(--border); border-radius:14px; box-shadow:0 12px 32px rgba(0,0,0,0.14); padding:6px; min-width:300px; max-height:380px; overflow-y:auto; }
+          .type-dd-head { display:flex; justify-content:space-between; align-items:center; padding:6px 10px 8px; font-size:12px; color:var(--muted); font-weight:600; }
+          .type-dd-head button { border:none; background:none; color:var(--pink-dark); font-weight:800; font-size:12px; cursor:pointer; font-family:inherit; }
+          .type-dd-opt { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:9px; font-size:14px; cursor:pointer; }
+          .type-dd-opt:hover { background:var(--bg); }
+          .type-dd-opt.on { font-weight:700; color:#B07A00; }
+          .type-dd-box { width:18px; height:18px; border-radius:5px; border:1.5px solid #ccd5da; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:13px; }
+          .type-dd-opt.on .type-dd-box { background:#FFC247; border-color:#FFC247; color:#fff; }
           .chip-label { font-size:13px; font-weight:800; color:var(--muted); min-width:52px; }
           .chip-dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
           .chip-count { font-size:11px; font-weight:800; background:rgba(0,0,0,0.06); border-radius:99px; padding:1px 7px; margin-left:2px; }
