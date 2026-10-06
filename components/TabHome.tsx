@@ -2,7 +2,12 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 
-const today = () => new Date().toISOString().slice(0,10)
+// วันที่ตามเวลาเครื่อง (toISOString เป็น UTC จะได้วันก่อนหน้าช่วงก่อน 07:00 เวลาไทย)
+const today = () => {
+  const d = new Date()
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')
+}
+const thaiDate = (s) => new Date(s+'T00:00:00').toLocaleDateString('th-TH',{ day:'numeric', month:'long', year:'numeric' })
 
 function Row({ label, children }) {
   return (
@@ -31,6 +36,8 @@ export default function TabHome() {
   const [iLot, setILot] = useState('')
   const [iQty, setIQty] = useState('')
   const [iUser, setIUser] = useState('')
+  const [iBackdate, setIBackdate] = useState(false)
+  const [iDate, setIDate] = useState(today())
   const [lots, setLots] = useState([])
   const [iSaving, setISaving] = useState(false)
   const [iMsg, setIMsg] = useState(null)
@@ -97,16 +104,19 @@ export default function TabHome() {
     if (!iType||!iItem||!iLot||!iQty||!iUser) {
       setIMsg({text:'กรุณากรอกให้ครบ: ประเภท, รายการ, Lot, จำนวน, ผู้เบิก', ok:false}); return
     }
+    const issueDate = iBackdate ? iDate : today()
+    if (!issueDate) { setIMsg({text:'กรุณาเลือกวันที่เบิก', ok:false}); return }
+    if (issueDate > today()) { setIMsg({text:'วันที่เบิกต้องไม่เกินวันนี้', ok:false}); return }
     const lotInfo = lots.find(l => l.lot===iLot)
     if (lotInfo && Number(iQty) > Number(lotInfo.balance)) {
       setIMsg({text:'จำนวนที่เบิกเกินกว่าคงเหลือใน Lot นี้ (คงเหลือ '+lotInfo.balance+')', ok:false}); return
     }
     setISaving(true); setIMsg(null)
     const {error} = await supabase.from('issues').insert({
-      date: today(), type:iType, item:iItem, lot:iLot, qty:Number(iQty), user_name:iUser,
+      date: issueDate, type:iType, item:iItem, lot:iLot, qty:Number(iQty), user_name:iUser,
     })
     if (error) { setIMsg({text:'บันทึกล้มเหลว: '+error.message, ok:false}); setISaving(false); return }
-    setIMsg({text:'บันทึกเบิกน้ำยาสำเร็จ', ok:true})
+    setIMsg({text:'บันทึกเบิกน้ำยาสำเร็จ'+(iBackdate ? ' (ย้อนหลัง วันที่ '+thaiDate(issueDate)+')' : ''), ok:true})
     setIQty(''); setILot('')
     supabase.from('stock_balance').select('lot,expire,balance').eq('type',iType).eq('item',iItem).gt('balance',0).order('expire')
       .then(({data}) => setLots(data||[]))
@@ -119,7 +129,22 @@ export default function TabHome() {
 
         {/* ISSUE FORM */}
         <div className="card form-pink" style={{ display:'flex', flexDirection:'column', height:'100%' }}>
-          <h2 style={{ color:'var(--pink-dark)' }}><i className="ti ti-package-export"></i> เบิกน้ำยา</h2>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, marginBottom:18 }}>
+            <h2 style={{ color:'var(--pink-dark)', marginBottom:0 }}><i className="ti ti-package-export"></i> เบิกน้ำยา</h2>
+            <button
+              className={'backdate-btn'+(iBackdate?' on':'')}
+              onClick={()=>{ setIBackdate(b=>!b); setIDate(today()); setIMsg(null) }}
+            >
+              <i className={'ti '+(iBackdate?'ti-x':'ti-calendar-time')}></i> {iBackdate ? 'ยกเลิกเบิกย้อนหลัง' : 'เบิกย้อนหลัง'}
+            </button>
+          </div>
+          {iBackdate && (
+            <div className="backdate-box">
+              <div className="field-label">วันที่เบิก (ย้อนหลัง)</div>
+              <input type="date" value={iDate} max={today()} onChange={e=>setIDate(e.target.value)}/>
+              {iDate && <div className="backdate-note"><i className="ti ti-info-circle"></i> จะบันทึกเป็นวันที่ <b>{thaiDate(iDate)}</b></div>}
+            </div>
+          )}
           <Row label="ประเภท">
             <select value={iType} onChange={e=>{setIType(e.target.value);setIItem('')}}>
               <option value="">— เลือกประเภท —</option>
@@ -143,8 +168,16 @@ export default function TabHome() {
 
           {iMsg && <div className={'pill '+(iMsg.ok?'pill-ok':'pill-danger')} style={{ display:'block', marginTop:6, marginBottom:10, padding:'10px 14px', fontSize:12 }}>{iMsg.text}</div>}
           <button className="btn btn-pink" style={{ width:'100%', justifyContent:'center', marginTop:8 }} onClick={handleIssueSubmit} disabled={iSaving}>
-            <i className="ti ti-check"></i> {iSaving?'กำลังบันทึก...':'บันทึกเบิกน้ำยา'}
+            <i className="ti ti-check"></i> {iSaving?'กำลังบันทึก...':iBackdate?'บันทึกเบิกย้อนหลัง':'บันทึกเบิกน้ำยา'}
           </button>
+          <style>{`
+            .backdate-btn { display:inline-flex; align-items:center; gap:6px; border:1.5px solid var(--pink); background:#fff; color:var(--pink-dark); border-radius:99px; padding:7px 14px; font-size:13px; font-weight:800; cursor:pointer; font-family:inherit; white-space:nowrap; transition:all .15s; }
+            .backdate-btn:hover { background:var(--pink-light); }
+            .backdate-btn.on { background:var(--pink-dark); border-color:var(--pink-dark); color:#fff; }
+            .backdate-box { background:var(--pink-light); border-radius:14px; padding:12px 14px; margin-bottom:12px; }
+            .backdate-box input { background:#fff; }
+            .backdate-note { font-size:13px; color:var(--pink-dark); margin-top:8px; display:flex; align-items:center; gap:6px; }
+          `}</style>
 
         </div>
 
