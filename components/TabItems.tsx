@@ -9,6 +9,7 @@ function daysUntil(d) {
 const esc = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"'
 
 const STATUSES = [
+  { key:'expired', label:'หมดอายุ', dot:'#C0392B' },
   { key:'crit',  label:'วิกฤต',     dot:'var(--pink-dark)' },
   { key:'warn',  label:'ใกล้หมด',   dot:'var(--yellow-dark)' },
   { key:'ok',    label:'ปกติ',      dot:'var(--gd)' },
@@ -20,6 +21,7 @@ function statusOf(r) {
   if (r.balance===0) return {key:'zero',label:'หมดสต็อก',cls:'pill-danger'}
   if (!r.expire) return {key:'noexp',label:'ไม่มี Exp',cls:'pill-warn'}
   const d = daysUntil(r.expire)
+  if (d<0) return {key:'expired',label:'หมดอายุ '+(-d)+' วันก่อน',cls:'pill-expired'}
   if (d<=30) return {key:'crit',label:'วิกฤต '+d+'วัน',cls:'pill-danger'}
   if (d<=DAYS_WARN) return {key:'warn',label:'ใกล้หมด '+d+'วัน',cls:'pill-warn'}
   return {key:'ok',label:'ปกติ',cls:'pill-ok'}
@@ -171,7 +173,7 @@ export default function TabItems() {
               <thead>
                 <tr>
                   {['รายการ','Lot','Expire','คงเหลือ','ราคา/หน่วย','มูลค่า','สถานะ'].map(h=>(
-                    <th key={h} style={{ textAlign: ['คงเหลือ','ราคา/หน่วย','มูลค่า'].includes(h) ? 'right' : 'left' }}>{h}</th>
+                    <th key={h} className={['ราคา/หน่วย','มูลค่า'].includes(h) ? 'col-money' : undefined} style={{ textAlign: ['คงเหลือ','ราคา/หน่วย','มูลค่า'].includes(h) ? 'right' : 'left' }}>{h}</th>
                   ))}
                   <th className="items-total">รวมคงเหลือ</th>
                 </tr>
@@ -198,8 +200,8 @@ export default function TabItems() {
                         <td style={{ textAlign:'right', fontWeight:800, color: r.balance===0?'var(--pink-dark)':'var(--text)' }}>
                           {r.balance} <span style={{ fontWeight:500, color:'var(--muted)', fontSize:12 }}>{r.unit}</span>
                         </td>
-                        <td style={{ textAlign:'right', color:'var(--muted)' }}>{r.unit_price!=null ? money(r.unit_price) : '—'}</td>
-                        <td style={{ textAlign:'right', fontWeight:700 }}>{value!=null ? money(value) : '—'}</td>
+                        <td className="col-money" style={{ textAlign:'right', color:'var(--muted)' }}>{r.unit_price!=null ? money(r.unit_price) : '—'}</td>
+                        <td className="col-money" style={{ textAlign:'right', fontWeight:700 }}>{value!=null ? money(value) : '—'}</td>
                         <td>{st && <span className={'pill '+st.cls}>{st.label}</span>}</td>
                         {first && (
                           <td rowSpan={ig.lots.length} className="items-total" style={{ color: ig.total===0?'var(--pink-dark)':undefined }}>
@@ -239,6 +241,7 @@ export default function TabItems() {
             .items-table tbody tr.items-first td { border-top:1px solid #bbb; }
             .items-table .items-sub { font-size:9px; margin-top:0; }
             .items-table .items-total { font-size:12px; }
+            .items-table .col-money { display:none; }
             .items-table td.items-total span { font-size:9px; }
           }
         `}</style>

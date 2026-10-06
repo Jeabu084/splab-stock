@@ -94,6 +94,7 @@ export default function StockPage() {
         .pill-ok { background:var(--gb); color:var(--gd); }
         .pill-warn { background:var(--yellow-bg); color:#B07A00; }
         .pill-danger { background:var(--pink-light); color:var(--pink-dark); }
+        .pill-expired { background:#C0392B; color:#fff; }
 
         /* BUTTONS */
         .btn { display:inline-flex; align-items:center; gap:7px; border:none; border-radius:99px; padding:11px 22px; font-size:13px; font-weight:800; cursor:pointer; transition:all .15s; font-family:inherit; }
@@ -214,7 +215,7 @@ export default function StockPage() {
               <div style={{ display:'flex', alignItems:'center', gap:12 }}>
                 <div style={{ textAlign:'right' }}>
                   <div style={{ fontSize:14, fontWeight:800 }}>{user.full_name}</div>
-                  <div style={{ fontSize:12, opacity:0.85, fontWeight:600, color: ROLE_COLOR[user.role] }}>
+                  <div style={{ display:'inline-flex', alignItems:'center', gap:5, marginTop:3, background:'#fff', borderRadius:99, padding:'2px 10px', fontSize:11, fontWeight:800, color: ROLE_COLOR[user.role] }}>
                     ● {ROLE_LABEL[user.role]}
                   </div>
                 </div>
