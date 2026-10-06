@@ -250,7 +250,10 @@ export default function TabItems() {
           .items-table .items-type-row:hover td { background:var(--yellow-bg); }
           .items-table .items-sub { font-size:12px; font-weight:500; color:var(--muted); margin-top:2px; }
           .items-table .items-total { text-align:right; vertical-align:middle; background:#EFF8F3; color:#3D7E66; font-weight:900; font-size:16px; border-left:2px solid #C9E4D8; white-space:nowrap; }
-          .items-table th.items-total { font-size:13px; font-weight:800; background:#C9E4D8; }
+          .items-table th { background:#C9E4D8; color:#3D7E66; font-weight:800; font-size:13px; border-bottom:none; }
+          .items-table th:first-child { border-top-left-radius:10px; }
+          .items-table th:last-child { border-top-right-radius:10px; }
+          .items-table th.items-total { background:#3D7E66; color:#fff; border-left:2px solid #3D7E66; }
           .items-table td.items-total span { font-size:12px; font-weight:600; color:var(--muted); }
           .items-table tr:hover td.items-total { background:#EFF8F3; }
           .type-chips { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
@@ -280,6 +283,7 @@ export default function TabItems() {
             .items-table .items-sub { font-size:9px; margin-top:0; }
             .items-table .items-total { font-size:12px; }
             .items-table .col-money { display:none; }
+            .items-table th { font-size:10px; padding:4px 6px; }
             .items-table td.items-total span { font-size:9px; }
           }
         `}</style>
