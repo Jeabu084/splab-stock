@@ -78,7 +78,7 @@ export default function TabUsage() {
     }
     setMonthsElapsed(elapsed)
 
-    console.log('FY',fiscalYear,start,end,'issues',issues?.length); // กรองปีงบใน JavaScript
+    // กรองปีงบใน JavaScript ด้วย string comparison
     const usageMap = {}
     ;(issues||[]).forEach(r => {
       const d = String(r.date).slice(0,10)
