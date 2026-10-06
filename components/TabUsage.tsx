@@ -14,7 +14,7 @@ const MONTH_LABEL = {
 function fyDateRange(fy) {
   return {
     start: `${fy-1}-10-01`,
-    end:   `${fy}-09-30T23:59:59`,
+    end:   `${fy}-10-01`,
   }
 }
 
