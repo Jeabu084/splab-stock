@@ -159,14 +159,33 @@ export default function StockPage() {
         .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
         .grid4 { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
 
-        @media print { .no-print { display:none!important; } }
+        .print-only { display:none; }
+
+        @media print {
+          @page { size:A4; margin:10mm; }
+          * { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .no-print { display:none!important; }
+          .print-only { display:block; }
+          body, .page-bg { background:#fff!important; }
+          .page-wrap { padding:0!important; max-width:none!important; }
+          .card { box-shadow:none; border-radius:0; padding:0; }
+          .card h2 { font-size:14px; margin-bottom:4px; }
+          .card h2 i { display:none; }
+          .pill { font-size:9px; padding:1px 6px; }
+          table { font-size:10px; }
+          th { padding:4px 6px; font-size:10px; color:#555; border-bottom:1px solid #999; }
+          td { padding:3px 6px; border-bottom:1px solid #e5e5e5; }
+          thead { display:table-header-group; }
+          tr { break-inside:avoid; }
+          tr:hover td { background:transparent; }
+        }
       `}</style>
 
-      <div style={{ minHeight:'100vh', background:'var(--bg)' }}>
-        <div style={{ maxWidth:1400, margin:'0 auto', padding:'20px 24px 48px' }}>
+      <div className="page-bg" style={{ minHeight:'100vh', background:'var(--bg)' }}>
+        <div className="page-wrap" style={{ maxWidth:1400, margin:'0 auto', padding:'20px 24px 48px' }}>
 
           {/* TOPBAR */}
-          <div style={{
+          <div className="no-print" style={{
             borderRadius:24, padding:'16px 26px', marginBottom:18, color:'#fff',
             background:'var(--teal)', boxShadow:'0 8px 24px rgba(93,184,196,0.35)',
             display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:14,
@@ -210,7 +229,7 @@ export default function StockPage() {
           </div>
 
           {/* SHORTCUTS */}
-          <div className="shortcuts" style={{ gridTemplateColumns: `repeat(${visibleTabs.length},1fr)` }}>
+          <div className="shortcuts no-print" style={{ gridTemplateColumns: `repeat(${visibleTabs.length},1fr)` }}>
             {visibleTabs.map(tab => (
               <div
                 key={tab.id}

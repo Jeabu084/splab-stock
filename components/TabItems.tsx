@@ -62,18 +62,11 @@ export default function TabItems() {
     const result = []
     master.forEach(m => {
       const k = m.type+'||'+m.item
-      const lots = balMap[k]||[]
       const unit = unitMap[k]||''
       const price = priceMap[k]
-      const total = lots.reduce((s,r)=>s+Number(r.balance),0)
-      if (lots.length > 1) {
-        result.push({type:m.type,item:m.item,lot:'(รวมทุก Lot)',expire:'',balance:total,unit,unit_price:price,isTotal:true})
-        lots.forEach(r=>result.push({...r,unit,unit_price:price,isTotal:false}))
-      } else if (lots.length===1) {
-        result.push({...lots[0],unit,unit_price:price,isTotal:false})
-      } else {
-        result.push({type:m.type,item:m.item,lot:'',expire:'',balance:0,unit,unit_price:price,isTotal:false})
-      }
+      const lots = balMap[k]||[]
+      if (lots.length) lots.forEach(r=>result.push({...r,balance:Number(r.balance),unit,unit_price:price}))
+      else result.push({type:m.type,item:m.item,lot:'',expire:'',balance:0,unit,unit_price:price})
     })
     setRows(result)
     setTypes([...new Set(master.map(r=>r.type))].sort())
@@ -81,14 +74,24 @@ export default function TabItems() {
   }
 
   const filtered = rows.filter(r => {
-    if (!showZero && r.balance===0 && !r.isTotal) return false
+    if (!showZero && r.balance===0) return false
     if (typeFilter && r.type!==typeFilter) return false
     if (search && !r.item.toLowerCase().includes(search.toLowerCase())) return false
     return true
   })
 
+  // จัดกลุ่ม ประเภท → รายการ → Lot
+  const typeGroups = []
+  filtered.forEach(r => {
+    let tg = typeGroups[typeGroups.length-1]
+    if (!tg || tg.type!==r.type) { tg = { type:r.type, items:[] }; typeGroups.push(tg) }
+    let ig = tg.items[tg.items.length-1]
+    if (!ig || ig.item!==r.item) { ig = { item:r.item, unit:r.unit, unit_price:r.unit_price, total:0, lots:[] }; tg.items.push(ig) }
+    ig.lots.push(r)
+    ig.total += r.balance
+  })
+
   function statusPill(r) {
-    if (r.isTotal) return null
     if (r.balance===0) return {label:'หมดสต็อก',cls:'pill-danger'}
     if (!r.expire) return {label:'ไม่มี Exp',cls:'pill-warn'}
     const d = daysUntil(r.expire)
@@ -97,8 +100,8 @@ export default function TabItems() {
     return {label:'ปกติ',cls:'pill-ok'}
   }
 
-  const totalValue = filtered.filter(r=>!rows.some(x=>x.isTotal&&x.type===r.type&&x.item===r.item)||r.isTotal)
-    .reduce((s,r)=> s + (r.unit_price ? r.balance*r.unit_price : 0), 0)
+  const totalValue = filtered.reduce((s,r)=> s + (r.unit_price ? r.balance*r.unit_price : 0), 0)
+  const money = (v) => v.toLocaleString('th-TH',{minimumFractionDigits:2})
 
   return (
     <div>
@@ -109,7 +112,13 @@ export default function TabItems() {
             มูลค่าคงเหลือรวม: {totalValue.toLocaleString('th-TH',{minimumFractionDigits:2})} บาท
           </div>
         </div>
-        <div style={{ fontSize:12, color:'var(--muted)', marginBottom:16 }}>ค้นหา กรองตามประเภท หรือ export ข้อมูลรายการน้ำยาทั้งหมด</div>
+        <div className="print-only" style={{ fontSize:10, color:'#555', marginBottom:6 }}>
+          พิมพ์วันที่ {new Date().toLocaleDateString('th-TH',{ day:'numeric', month:'long', year:'numeric' })}
+          {typeFilter && ' · ประเภท: '+typeFilter}
+          {search && ' · ค้นหา: '+search}
+          {!showZero && ' · ไม่รวมสต็อก 0'}
+        </div>
+        <div className="no-print" style={{ fontSize:12, color:'var(--muted)', marginBottom:16 }}>ค้นหา กรองตามประเภท หรือ export ข้อมูลรายการน้ำยาทั้งหมด</div>
 
         <div className="no-print" style={{ display:'flex', gap:10, marginBottom:16, flexWrap:'wrap', alignItems:'center' }}>
           <select value={typeFilter} onChange={e=>setTypeFilter(e.target.value)} style={{ width:'auto', minWidth:160 }}>
@@ -132,35 +141,62 @@ export default function TabItems() {
           <div style={{ textAlign:'center', padding:32, color:'var(--muted)' }}>กำลังโหลด...</div>
         ) : (
           <div style={{ overflowX:'auto' }}>
-            <table>
+            <table className="items-table">
               <thead>
                 <tr>
-                  {['ประเภท','รายการ','Lot','Expire','คงเหลือ','หน่วย','ราคา/หน่วย','มูลค่า','สถานะ'].map(h=>(
-                    <th key={h}>{h}</th>
+                  {['รายการ','Lot','Expire','คงเหลือ','ราคา/หน่วย','มูลค่า','สถานะ'].map(h=>(
+                    <th key={h} style={{ textAlign: ['คงเหลือ','ราคา/หน่วย','มูลค่า'].includes(h) ? 'right' : 'left' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {filtered.map((r,i)=>{
-                  const st = statusPill(r)
-                  const isSub = !r.isTotal && rows.some(x=>x.isTotal&&x.type===r.type&&x.item===r.item)
-                  const value = r.unit_price ? r.balance*r.unit_price : null
-                  return (
-                    <tr key={i} style={{ background: r.isTotal ? 'var(--pb)' : r.balance===0 ? '#FFF8F8' : undefined }}>
-                      <td>{!isSub?r.type:''}</td>
-                      <td style={{ fontWeight: r.isTotal?800:600, color: r.isTotal?'var(--pv)':'var(--text)' }}>{!isSub?r.item:''}</td>
-                      <td style={{ paddingLeft: isSub?28:undefined, color: r.isTotal?'var(--pv)':'var(--text)', fontStyle: r.isTotal?'italic':'normal' }}>{r.lot||'—'}</td>
-                      <td style={{ color:'var(--muted)' }}>{r.expire||'—'}</td>
-                      <td style={{ fontWeight:800, color: r.balance===0?'var(--pink-dark)':r.isTotal?'var(--pv)':'var(--text)' }}>{r.balance}</td>
-                      <td style={{ color:'var(--muted)' }}>{!isSub?(r.unit||'—'):''}</td>
-                      <td style={{ color:'var(--muted)' }}>{!isSub?(r.unit_price!=null?r.unit_price.toLocaleString('th-TH',{minimumFractionDigits:2}):'—'):''}</td>
-                      <td style={{ fontWeight:700, color:'var(--pv)' }}>{value!=null?value.toLocaleString('th-TH',{minimumFractionDigits:2}):'—'}</td>
-                      <td>{st && <span className={'pill '+st.cls}>{st.label}</span>}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
+              {typeGroups.map(tg => (
+                <tbody key={tg.type}>
+                  <tr className="items-type-row">
+                    <td colSpan={7}>{tg.type} <span>· {tg.items.length} รายการ</span></td>
+                  </tr>
+                  {tg.items.map(ig => ig.lots.map((r,li) => {
+                    const st = statusPill(r)
+                    const value = r.unit_price ? r.balance*r.unit_price : null
+                    const first = li===0
+                    return (
+                      <tr key={ig.item+'-'+li} className={first ? 'items-first' : undefined}>
+                        {first && (
+                          <td rowSpan={ig.lots.length} style={{ verticalAlign:'top' }}>
+                            <div style={{ fontWeight:700 }}>{ig.item}</div>
+                            {ig.lots.length>1 && (
+                              <div className="items-sub">
+                                {ig.lots.length} Lot · รวม <b style={{ color:'var(--text)' }}>{ig.total}</b> {ig.unit}
+                              </div>
+                            )}
+                          </td>
+                        )}
+                        <td>{r.lot||'—'}</td>
+                        <td style={{ color:'var(--muted)' }}>{r.expire||'—'}</td>
+                        <td style={{ textAlign:'right', fontWeight:800, color: r.balance===0?'var(--pink-dark)':'var(--text)' }}>
+                          {r.balance} <span style={{ fontWeight:500, color:'var(--muted)', fontSize:12 }}>{r.unit}</span>
+                        </td>
+                        <td style={{ textAlign:'right', color:'var(--muted)' }}>{r.unit_price!=null ? money(r.unit_price) : '—'}</td>
+                        <td style={{ textAlign:'right', fontWeight:700 }}>{value!=null ? money(value) : '—'}</td>
+                        <td>{st && <span className={'pill '+st.cls}>{st.label}</span>}</td>
+                      </tr>
+                    )
+                  }))}
+                </tbody>
+              ))}
             </table>
+            <style>{`
+              .items-table tbody tr.items-first td { border-top:1.5px solid rgba(0,0,0,0.09); }
+              .items-table .items-type-row td { background:var(--yellow-bg); color:#B07A00; font-weight:800; font-size:14px; border-top:none; padding:8px 12px; }
+              .items-table .items-type-row td span { font-weight:600; font-size:12px; opacity:.8; }
+              .items-table .items-type-row:hover td { background:var(--yellow-bg); }
+              .items-table .items-sub { font-size:12px; color:var(--muted); margin-top:2px; }
+              @media print {
+                .items-table .items-type-row td { font-size:11px; padding:3px 6px; border-bottom:1px solid #ccc; }
+                .items-table .items-type-row { break-after:avoid; }
+                .items-table tbody tr.items-first td { border-top:1px solid #bbb; }
+                .items-table .items-sub { font-size:9px; margin-top:0; }
+              }
+            `}</style>
             {filtered.length===0 && <div style={{ textAlign:'center', padding:32, color:'var(--muted)' }}>ไม่พบรายการ</div>}
           </div>
         )}
