@@ -31,6 +31,7 @@ export default function TabAnnual() {
   const [typeFilter, setTypeFilter] = useState([])
   const [search, setSearch] = useState('')
   const [showIdle, setShowIdle] = useState(false)
+  const [showHidden, setShowHidden] = useState(true)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
 
@@ -41,14 +42,14 @@ export default function TabAnnual() {
     const { start, end } = fyRange(fy)
     try {
       const [{ data: master }, rc, is, ob] = await Promise.all([
-        supabase.from('master_items').select('type,item,unit').eq('is_hidden',false).order('type').order('item'),
+        supabase.from('master_items').select('type,item,unit,is_hidden').order('type').order('item'),
         fetchAll('receipts', 'id,type,item,date,qty,unit', end),
         fetchAll('issues', 'id,type,item,date,qty', end),
         fetchAll('opening_balance', 'id,type,item,date,qty', end),
       ])
       const map: Record<string, any> = {}
-      const get = (type, item) => map[type+'||'+item] ||= { type, item, unit:'', unitDate:'', carry:0, rin:0, rout:0 }
-      ;(master||[]).forEach(m => { get(m.type, m.item).unit = m.unit || '' })
+      const get = (type, item) => map[type+'||'+item] ||= { type, item, unit:'', unitDate:'', carry:0, rin:0, rout:0, hidden:false }
+      ;(master||[]).forEach(m => { const g = get(m.type, m.item); g.unit = m.unit || ''; g.hidden = !!m.is_hidden })
 
       // ยอดตั้งต้นระบบนับเป็นยอดยกมา (เหมือน Stock Card)
       ob.forEach(r => { get(r.type, r.item).carry += Number(r.qty) })
@@ -77,7 +78,11 @@ export default function TabAnnual() {
     setLoading(false)
   }
 
+  // น้ำยาที่เลิกใช้: แสดงเฉพาะปีที่ยังมีความเคลื่อนไหว
+  const isActive = (r) => r.carry || r.rin || r.rout
+  const hiddenCount = rows.filter(r => r.hidden && isActive(r)).length
   const filtered = rows.filter(r => {
+    if (r.hidden && (!showHidden || !isActive(r))) return false
     if (typeFilter.length && !typeFilter.includes(r.type)) return false
     if (search && !r.item.toLowerCase().includes(search.toLowerCase())) return false
     if (!showIdle && !r.carry && !r.rin && !r.rout) return false
@@ -94,8 +99,8 @@ export default function TabAnnual() {
   const fileName = 'สรุปสต็อกประจำปีงบ_'+fyBE
 
   function exportCSV() {
-    const lines = [['ประเภท','รายการ','หน่วยนับ','ยอดยกมา','รับ','เบิก','คงเหลือ'].map(esc).join(',')]
-    filtered.forEach(r => lines.push([r.type, r.item, r.unit, r.carry, r.rin, r.rout, r.end].map(esc).join(',')))
+    const lines = [['ประเภท','รายการ','หน่วยนับ','ยอดยกมา','รับ','เบิก','คงเหลือ','สถานะ'].map(esc).join(',')]
+    filtered.forEach(r => lines.push([r.type, r.item, r.unit, r.carry, r.rin, r.rout, r.end, r.hidden ? 'เลิกใช้' : ''].map(esc).join(',')))
     const blob = new Blob(['﻿'+lines.join('\n')], { type:'text/csv;charset=utf-8' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
@@ -121,6 +126,7 @@ export default function TabAnnual() {
           <div className="rh-meta">
             ประเภท: {typeFilter.length ? typeFilter.join(', ') : 'ทุกประเภท'}
             {search && ' · ค้นหา: '+search}
+            {hiddenCount>0 && (showHidden ? ' · รวมน้ำยาที่เลิกใช้' : ' · ไม่รวมน้ำยาที่เลิกใช้')}
             {' · '}จำนวน {filtered.length} รายการ · พิมพ์วันที่ {longDate(new Date())}
           </div>
         </div>
@@ -134,6 +140,11 @@ export default function TabAnnual() {
           <button className={'idle-chip'+(showIdle?' on':'')} onClick={()=>setShowIdle(v=>!v)}>
             {showIdle && <i className="ti ti-check"></i>} แสดงรายการที่ไม่มีความเคลื่อนไหว
           </button>
+          {hiddenCount>0 && (
+            <button className={'idle-chip'+(showHidden?' on':'')} onClick={()=>setShowHidden(v=>!v)}>
+              {showHidden && <i className="ti ti-check"></i>} รวมน้ำยาที่เลิกใช้ ({hiddenCount})
+            </button>
+          )}
           <div style={{ flex:1 }}></div>
           <button className="btn btn-outline" onClick={exportCSV}><i className="ti ti-file-spreadsheet"></i> ดาวน์โหลด CSV</button>
           <PrintButton fileName={fileName} className="btn btn-purple" />
@@ -159,11 +170,11 @@ export default function TabAnnual() {
               </thead>
               {groups.map(g => (
                 <tbody key={g.type}>
-                  <tr className="as-type"><td colSpan={7}>{g.type} <span>· {g.items.length} รายการ</span></td></tr>
+                  <tr className="as-type"><td colSpan={7}>{g.type} <span>· {g.items.length} รายการ</span>{g.items.every(r=>r.hidden) && <em className="disc">เลิกใช้</em>}</td></tr>
                   {g.items.map((r,i) => (
                     <tr key={r.item}>
                       <td className="no-col">{i+1}</td>
-                      <td className="item">{r.item}</td>
+                      <td className="item">{r.item}{r.hidden && !g.items.every(x=>x.hidden) && <em className="disc">เลิกใช้</em>}</td>
                       <td className="unit">{r.unit||'—'}</td>
                       <td className="n">{num(r.carry)}</td>
                       <td className="n in">{r.rin ? num(r.rin) : '—'}</td>
@@ -199,6 +210,7 @@ export default function TabAnnual() {
         .as-table .as-type td span { font-weight:600; font-size:12px; opacity:.8; }
         .as-table .as-type:hover td { background:var(--yellow-bg); }
         .as-table td.item { font-weight:700; }
+        .disc { font-style:normal; display:inline-block; margin-left:8px; font-size:10.5px; font-weight:800; color:#6b7c85; background:#EEF1F3; border-radius:99px; padding:1px 8px; vertical-align:middle; }
         .as-table .unit { color:var(--muted); width:10%; }
         .as-table td.in { color:#3D7E66; font-weight:700; }
         .as-table td.out { color:var(--pink-dark); font-weight:700; }

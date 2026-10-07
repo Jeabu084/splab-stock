@@ -48,6 +48,7 @@ export default function TabUsage() {
   const [grouped, setGrouped] = useState([])
   const [loading, setLoading] = useState(true)
   const [elapsed, setElapsed] = useState(12)
+  const [showHidden, setShowHidden] = useState(true)
 
   useEffect(() => { loadData(fy) }, [fy])
 
@@ -56,7 +57,7 @@ export default function TabUsage() {
     const { start, end } = fyRange(fiscalYear)
 
     const [{ data: master }, issues] = await Promise.all([
-      supabase.from('master_items').select('type,item').eq('is_hidden',false).order('type').order('item'),
+      supabase.from('master_items').select('type,item,is_hidden').order('type').order('item'),
       fetchIssues(start, end),
     ])
     if (!master) { setLoading(false); return }
@@ -87,22 +88,33 @@ export default function TabUsage() {
       const months = FY_MONTHS.map(mn => md[mn] || 0)
       const total = months.reduce((s,v) => s+v, 0)
       const avg = Math.round((total/el)*10)/10
+      // น้ำยาที่เลิกใช้: แสดงเฉพาะปีที่ยังมีการเบิก
+      if (m.is_hidden && !total) return
       if (!bt[m.type]) bt[m.type] = []
-      bt[m.type].push({ item: m.item, months, total, avg })
+      bt[m.type].push({ item: m.item, months, total, avg, hidden: !!m.is_hidden })
     })
 
     setGrouped(Object.keys(bt).sort().map(type => ({ type, items: bt[type] })))
     setLoading(false)
   }
 
+  const hiddenCount = grouped.reduce((t,g) => t + g.items.filter(it=>it.hidden).length, 0)
+  const shown = showHidden ? grouped
+    : grouped.map(g => ({ ...g, items: g.items.filter(it => !it.hidden) })).filter(g => g.items.length)
+
   return (
     <div data-print-landscape>
       <div className="card">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6, flexWrap:'wrap', gap:10 }}>
           <h2 style={{ marginBottom:0 }}><i className="ti ti-report-analytics" style={{ color:'#4A9B7F' }}></i> Usage</h2>
-          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+            {hiddenCount>0 && (
+              <button className={'disc-chip no-print'+(showHidden?' on':'')} onClick={()=>setShowHidden(v=>!v)}>
+                {showHidden && <i className="ti ti-check"></i>} รวมน้ำยาที่เลิกใช้ ({hiddenCount})
+              </button>
+            )}
             <button className="btn btn-teal no-print" onClick={()=>loadData(fy)}><i className="ti ti-refresh"></i> รีเฟรช</button>
-            <button className="btn btn-purple no-print" onClick={()=>exportCSV(grouped,fy)}><i className="ti ti-download"></i> Export CSV</button>
+            <button className="btn btn-purple no-print" onClick={()=>exportCSV(shown,fy)}><i className="ti ti-download"></i> Export CSV</button>
             <PrintButton fileName={'Usage_ปีงบ'+toBE(fy)} />
           </div>
         </div>
@@ -113,9 +125,9 @@ export default function TabUsage() {
           <div style={{ textAlign:'center', padding:32, color:'var(--muted)' }}>กำลังโหลด...</div>
         ) : (
           <div style={{ overflowX:'auto' }}>
-            {grouped.map(group => (
+            {shown.map(group => (
               <div key={group.type}>
-                <div className="ov-section-title">{group.type}</div>
+                <div className="ov-section-title">{group.type}{group.items.every(it=>it.hidden) && <em className="disc">เลิกใช้</em>}</div>
                 <table className="usage-table" style={{ minWidth:1100 }}>
                   <thead>
                     <tr>
@@ -128,7 +140,7 @@ export default function TabUsage() {
                   <tbody>
                     {group.items.map((it, i) => (
                       <tr key={i}>
-                        <td style={{ fontWeight:600 }}>{it.item}</td>
+                        <td style={{ fontWeight:600 }}>{it.item}{it.hidden && !group.items.every(x=>x.hidden) && <em className="disc">เลิกใช้</em>}</td>
                         {it.months.map((v,j) => (
                           <td key={j} style={{ textAlign:'center', color: v>0?'var(--text)':'var(--muted)', fontWeight: v>0?700:400 }}>
                             {v>0 ? v : '—'}
@@ -147,6 +159,9 @@ export default function TabUsage() {
         )}
       </div>
       <style>{`
+        .disc { font-style:normal; display:inline-block; margin-left:8px; font-size:10.5px; font-weight:800; color:#6b7c85; background:#EEF1F3; border-radius:99px; padding:1px 8px; vertical-align:middle; }
+        .disc-chip { display:inline-flex; align-items:center; gap:5px; border:1.5px solid var(--border); background:#fff; color:var(--muted); border-radius:99px; padding:10px 16px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; }
+        .disc-chip.on { background:#EFF8F3; border-color:#8FCBB0; color:#3D7E66; }
         :where(html.pg-print) {
           .usage-table { min-width:0!important; table-layout:fixed; }
           .usage-table th, .usage-table td { font-size:9pt!important; padding:3px 4px!important; min-width:0!important; }

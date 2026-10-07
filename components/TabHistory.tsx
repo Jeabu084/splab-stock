@@ -30,6 +30,8 @@ function exportCSV(type: string, item: string, rows: any[], lotRemain: any[]) {
 export default function TabHistory() {
   const [types, setTypes] = useState([])
   const [itemsByType, setItemsByType] = useState({})
+  const [hiddenSet, setHiddenSet] = useState(new Set())   // type||item ที่เลิกใช้
+  const [showHidden, setShowHidden] = useState(true)
   const [selType, setSelType] = useState('')
   const [selItem, setSelItem] = useState('')
   const [rows, setRows] = useState([])
@@ -52,11 +54,16 @@ export default function TabHistory() {
   }, [])
 
   useEffect(() => {
-    supabase.from('master_items').select('type,item').eq('is_hidden',false).order('type').order('item').then(({data})=>{
+    supabase.from('master_items').select('type,item,is_hidden').order('type').order('item').then(({data})=>{
       if (!data) return
       const map = {}
-      data.forEach(r=>{ if (!map[r.type]) map[r.type]=[]; map[r.type].push(r.item) })
-      setItemsByType(map); setTypes(Object.keys(map).sort())
+      const hs = new Set()
+      data.forEach(r=>{
+        if (!map[r.type]) map[r.type]=[]
+        map[r.type].push(r.item)
+        if (r.is_hidden) hs.add(r.type+'||'+r.item)
+      })
+      setItemsByType(map); setTypes(Object.keys(map).sort()); setHiddenSet(hs)
     })
   }, [])
 
@@ -98,6 +105,10 @@ export default function TabHistory() {
   useEffect(() => { if (loaded) load() }, [fy])
 
   const lastBal = rows.length ? rows[rows.length-1].balance : 0
+  const typeHidden = (t) => (itemsByType[t]||[]).length>0 && (itemsByType[t]||[]).every(i => hiddenSet.has(t+'||'+i))
+  const visibleTypes = types.filter(t => showHidden || !typeHidden(t))
+  const visibleItems = (itemsByType[selType]||[]).filter(i => showHidden || !hiddenSet.has(selType+'||'+i))
+  const selHidden = hiddenSet.has(selType+'||'+selItem)
   const balLabel = fy < currentFY() ? 'คงเหลือ ณ สิ้นปีงบ '+toBE(fy) : 'คงเหลือปัจจุบัน'
 
   return (
@@ -107,13 +118,23 @@ export default function TabHistory() {
         <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'flex-end' }}>
           <select value={selType} onChange={(e)=>{setSelType(e.target.value);setSelItem('');setLoaded(false)}} style={{ width:'auto', minWidth:160 }}>
             <option value="">— เลือกประเภท —</option>
-            {types.map(t=><option key={t} value={t}>{t}</option>)}
+            {visibleTypes.map(t=><option key={t} value={t}>{t}{typeHidden(t)?' (เลิกใช้)':''}</option>)}
           </select>
           <select value={selItem} onChange={(e)=>{setSelItem(e.target.value);setLoaded(false)}} style={{ width:'auto', minWidth:200 }}>
             <option value="">— เลือกรายการ —</option>
-            {(itemsByType[selType]||[]).map(i=><option key={i} value={i}>{i}</option>)}
+            {visibleItems.map(i=><option key={i} value={i}>{i}{hiddenSet.has(selType+'||'+i)?' (เลิกใช้)':''}</option>)}
           </select>
           <button className="btn btn-teal" onClick={load}><i className="ti ti-eye"></i> แสดง</button>
+          {hiddenSet.size>0 && (
+            <button className={'disc-chip'+(showHidden?' on':'')} onClick={()=>{
+              const next = !showHidden
+              setShowHidden(next)
+              if (!next && hiddenSet.has(selType+'||'+selItem)) { setSelItem(''); setLoaded(false) }
+              if (!next && typeHidden(selType)) { setSelType(''); setSelItem(''); setLoaded(false) }
+            }}>
+              {showHidden && <i className="ti ti-check"></i>} รวมน้ำยาที่เลิกใช้
+            </button>
+          )}
         </div>
       </div>
 
@@ -123,7 +144,7 @@ export default function TabHistory() {
             <div style={{ fontWeight:800, fontSize:20, color:'var(--text)' }}>Stock Card น้ำยา — SPLABSTOCK</div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:12, fontSize:15 }}>
               <div><span className="lbl">ประเภท: </span><b>{selType}</b></div>
-              <div><span className="lbl">รายการ: </span><b>{selItem}</b></div>
+              <div><span className="lbl">รายการ: </span><b>{selItem}</b>{selHidden && <em className="disc">เลิกใช้</em>}</div>
               <div><span className="lbl">ปีงบประมาณ: </span><b>{toBE(fy)}</b> <span className="lbl" style={{ fontWeight:500, fontSize:12 }}>(1 ต.ค.{toBE(fy)-1} – 30 ก.ย.{toBE(fy)})</span></div>
               <div><span className="lbl">วันที่พิมพ์: </span><b>{new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'})}</b></div>
               <div><span className="lbl">{balLabel}: </span><b style={{ color:'#2F6B55', fontSize:16 }}>{lastBal}</b></div>
@@ -256,6 +277,9 @@ export default function TabHistory() {
         .sc-logs table { margin-top:10px; font-size:12px; }
         .sc-sign { display:none; }
         .sc-head .lbl { color:#4d5d66; font-weight:600; }
+        .disc { font-style:normal; display:inline-block; margin-left:8px; font-size:10.5px; font-weight:800; color:#6b7c85; background:#EEF1F3; border-radius:99px; padding:1px 8px; vertical-align:middle; }
+        .disc-chip { display:inline-flex; align-items:center; gap:5px; border:1.5px solid var(--border); background:#fff; color:var(--muted); border-radius:99px; padding:10px 16px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; height:44px; }
+        .disc-chip.on { background:#EFF8F3; border-color:#8FCBB0; color:#3D7E66; }
         .sc-table th { background:#C9E4D8; color:#3D7E66; font-weight:800; font-size:13px; border-bottom:none; white-space:nowrap; }
         .sc-table th:first-child { border-top-left-radius:10px; }
         .sc-table th:last-child { border-top-right-radius:10px; }
