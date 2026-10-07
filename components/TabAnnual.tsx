@@ -1,11 +1,31 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import TypeMultiSelect from '@/components/TypeMultiSelect'
 import { useFY, fyRange, toBE } from '@/lib/fiscal'
 import PrintButton from '@/components/PrintButton'
 
-const longDate = (d) => d.toLocaleDateString('th-TH',{ day:'numeric', month:'long', year:'numeric' })
+const MONTHS = ['','มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม']
+const MONTHS_S = ['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+const FY_MONTHS = [10,11,12,1,2,3,4,5,6,7,8,9]
+const pad = (n) => String(n).padStart(2,'0')
+
+// ช่วงวันที่ของรายงาน: ทั้งปีงบ หรือเดือน m ของปีงบ fy  (end แบบ < ไม่รวม)
+function periodOf(fy, month) {
+  if (!month) {
+    const { start, end } = fyRange(fy)
+    return { start, end, lastDay: (fy)+'-09-30' }
+  }
+  const y = month >= 10 ? fy-1 : fy
+  const start = y+'-'+pad(month)+'-01'
+  const end = month===12 ? (y+1)+'-01-01' : y+'-'+pad(month+1)+'-01'
+  const last = new Date(y, month, 0).getDate()
+  return { start, end, lastDay: y+'-'+pad(month)+'-'+pad(last) }
+}
+const dShort = (iso) => { const [y,m,d] = iso.split('-').map(Number); return d+' '+MONTHS_S[m]+' '+String(y+543).slice(2) }
+const dLong  = (iso) => { const [y,m,d] = iso.split('-').map(Number); return d+' '+MONTHS[m]+' '+(y+543) }
+const todayISO = () => { const t = new Date(); return t.getFullYear()+'-'+pad(t.getMonth()+1)+'-'+pad(t.getDate()) }
+
 const num = (v) => Number(v).toLocaleString('th-TH')
 // เรียงแบบเดียวกับ order() ของฐานข้อมูล (ภาษาอังกฤษก่อนภาษาไทย) ให้ตรงกับหน้าอื่น
 const cmp = (a, b) => a < b ? -1 : a > b ? 1 : 0
@@ -26,8 +46,8 @@ async function fetchAll(table, cols, end) {
 
 export default function TabAnnual() {
   const { fy } = useFY()
-  const [rows, setRows] = useState([])
-  const [types, setTypes] = useState([])
+  const [raw, setRaw] = useState(null)        // { master, rc, is, ob } ทั้งหมดถึงสิ้นปีงบ
+  const [month, setMonth] = useState(0)       // 0 = ทั้งปีงบ, 1–12 = รายเดือน
   const [typeFilter, setTypeFilter] = useState([])
   const [search, setSearch] = useState('')
   const [showIdle, setShowIdle] = useState(false)
@@ -39,7 +59,7 @@ export default function TabAnnual() {
 
   async function load() {
     setLoading(true); setErr('')
-    const { start, end } = fyRange(fy)
+    const { end } = fyRange(fy)
     try {
       const [{ data: master }, rc, is, ob] = await Promise.all([
         supabase.from('master_items').select('type,item,unit,is_hidden').order('type').order('item'),
@@ -47,35 +67,49 @@ export default function TabAnnual() {
         fetchAll('issues', 'id,type,item,date,qty', end),
         fetchAll('opening_balance', 'id,type,item,date,qty', end),
       ])
-      const map: Record<string, any> = {}
-      const get = (type, item) => map[type+'||'+item] ||= { type, item, unit:'', unitDate:'', carry:0, rin:0, rout:0, hidden:false }
-      ;(master||[]).forEach(m => { const g = get(m.type, m.item); g.unit = m.unit || ''; g.hidden = !!m.is_hidden })
-
-      // ยอดตั้งต้นระบบนับเป็นยอดยกมา (เหมือน Stock Card)
-      ob.forEach(r => { get(r.type, r.item).carry += Number(r.qty) })
-      rc.forEach(r => {
-        const g = get(r.type, r.item)
-        if (r.unit && r.date >= g.unitDate) { g.unit = r.unit; g.unitDate = r.date }
-        if (r.date < start) g.carry += Number(r.qty)
-        else g.rin += Number(r.qty)
-      })
-      is.forEach(r => {
-        const g = get(r.type, r.item)
-        if (r.date < start) g.carry -= Number(r.qty)
-        else g.rout += Number(r.qty)
-      })
-
-      const visible = new Set((master||[]).map(m => m.type+'||'+m.item))
-      const result = Object.entries(map)
-        .filter(([k]) => visible.has(k))
-        .map(([,g]) => ({ ...g, end:g.carry+g.rin-g.rout }))
-        .sort((a,b) => cmp(a.type,b.type) || cmp(a.item,b.item))
-      setRows(result)
-      setTypes([...new Set(result.map(r=>r.type))])
+      setRaw({ master: master||[], rc, is, ob })
     } catch (e) {
       setErr('โหลดข้อมูลไม่สำเร็จ: '+e.message)
     }
     setLoading(false)
+  }
+
+  const period = periodOf(fy, month)
+
+  // คำนวณยอดของช่วงที่เลือกจากข้อมูลที่โหลดไว้ (สลับเดือนได้ทันที ไม่ต้องโหลดใหม่)
+  const rows = useMemo(() => {
+    if (!raw) return []
+    const { start, end } = period
+    const map: Record<string, any> = {}
+    const get = (type, item) => map[type+'||'+item] ||= { type, item, unit:'', unitDate:'', carry:0, rin:0, rout:0, hidden:false }
+    raw.master.forEach(m => { const g = get(m.type, m.item); g.unit = m.unit || ''; g.hidden = !!m.is_hidden })
+    // ยอดตั้งต้นระบบนับเป็นยอดยกมา (เหมือน Stock Card)
+    raw.ob.forEach(r => { if (r.date < end) get(r.type, r.item).carry += Number(r.qty) })
+    raw.rc.forEach(r => {
+      const g = get(r.type, r.item)
+      if (r.unit && r.date >= g.unitDate) { g.unit = r.unit; g.unitDate = r.date }
+      if (r.date < start) g.carry += Number(r.qty)
+      else if (r.date < end) g.rin += Number(r.qty)
+    })
+    raw.is.forEach(r => {
+      const g = get(r.type, r.item)
+      if (r.date < start) g.carry -= Number(r.qty)
+      else if (r.date < end) g.rout += Number(r.qty)
+    })
+    const visible = new Set(raw.master.map(m => m.type+'||'+m.item))
+    return Object.entries(map)
+      .filter(([k]) => visible.has(k))
+      .map(([,g]) => ({ ...g, end:g.carry+g.rin-g.rout }))
+      .sort((a,b) => cmp(a.type,b.type) || cmp(a.item,b.item))
+  }, [raw, period.start, period.end])
+  const types = useMemo(() => [...new Set(rows.map(r=>r.type))], [rows])
+
+  // เดือนในอนาคตยังไม่มีข้อมูล
+  const today = todayISO()
+  const monthOk = (m) => periodOf(fy, m).start <= today
+  function pickMonthly() {
+    const ok = FY_MONTHS.filter(monthOk)
+    setMonth(ok.length ? ok[ok.length-1] : 10)
   }
 
   // น้ำยาที่เลิกใช้: แสดงเฉพาะปีที่ยังมีความเคลื่อนไหว
@@ -96,7 +130,12 @@ export default function TabAnnual() {
   })
 
   const fyBE = toBE(fy)
-  const fileName = 'สรุปสต็อกประจำปีงบ_'+fyBE
+  const monthYearBE = month ? (month >= 10 ? fyBE-1 : fyBE) : 0
+  const fileName = month ? 'สรุปคงเหลือประจำเดือน_'+MONTHS_S[month]+monthYearBE : 'สรุปสต็อกประจำปีงบ_'+fyBE
+  const reportTitle = month
+    ? 'รายงานสรุปยอดคงเหลือน้ำยาประจำเดือน '+MONTHS[month]+' '+monthYearBE
+    : 'รายงานสรุปสต็อกน้ำยาประจำปีงบประมาณ '+fyBE
+  const reportRange = 'ระหว่างวันที่ '+dLong(period.start)+' – '+dLong(period.lastDay)
 
   function exportCSV() {
     const lines = [['ประเภท','รายการ','หน่วยนับ','ยอดยกมา','รับ','เบิก','คงเหลือ','สถานะ'].map(esc).join(',')]
@@ -112,22 +151,33 @@ export default function TabAnnual() {
     <div className="annual-stock">
       <div className="card">
         <div className="no-print" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:10, marginBottom:6 }}>
-          <h2 style={{ marginBottom:0 }}><i className="ti ti-calendar-stats" style={{ color:'#3D7E66' }}></i> สรุปสต็อกประจำปี</h2>
-          <span className="pill" style={{ background:'#C9E4D8', color:'#3D7E66', fontSize:14, padding:'8px 16px' }}>ปีงบประมาณ {toBE(fy)}</span>
+          <h2 style={{ marginBottom:0 }}><i className="ti ti-calendar-stats" style={{ color:'#3D7E66' }}></i> สรุปยอดคงเหลือ</h2>
+          <div className="period-pick">
+            <span className="pp-fy">ปีงบ {fyBE}</span>
+            <button className={!month ? 'on' : ''} onClick={()=>setMonth(0)}>ทั้งปีงบ</button>
+            <button className={month ? 'on' : ''} onClick={()=>{ if (!month) pickMonthly() }}>รายเดือน</button>
+            {!!month && (
+              <select value={month} onChange={e=>setMonth(Number(e.target.value))}>
+                {FY_MONTHS.map(m => (
+                  <option key={m} value={m} disabled={!monthOk(m)}>{MONTHS[m]} {m>=10 ? fyBE-1 : fyBE}</option>
+                ))}
+              </select>
+            )}
+          </div>
         </div>
         <div className="no-print" style={{ fontSize:12, color:'var(--muted)', marginBottom:16 }}>
-          1 ต.ค.{fyBE-1} – 30 ก.ย.{fyBE} · คงเหลือ = ยอดยกมา + รับ − เบิก · ดูวันที่รับ/เบิกรายครั้งได้ที่หน้า Stock Card
+          {dShort(period.start)} – {dShort(period.lastDay)} · คงเหลือ = ยอดยกมา + รับ − เบิก · ดูวันที่รับ/เบิกรายครั้งได้ที่หน้า Stock Card
         </div>
 
         {/* หัวรายงานตอนพิมพ์ */}
         <div className="print-only report-head">
-          <div className="rh-title">รายงานสรุปสต็อกน้ำยาประจำปีงบประมาณ {fyBE}</div>
-          <div className="rh-sub">ระหว่างวันที่ 1 ตุลาคม {fyBE-1} – 30 กันยายน {fyBE}</div>
+          <div className="rh-title">{reportTitle}</div>
+          <div className="rh-sub">{reportRange}{month ? ' (ปีงบประมาณ '+fyBE+')' : ''}</div>
           <div className="rh-meta">
             ประเภท: {typeFilter.length ? typeFilter.join(', ') : 'ทุกประเภท'}
             {search && ' · ค้นหา: '+search}
             {hiddenCount>0 && (showHidden ? ' · รวมน้ำยาที่เลิกใช้' : ' · ไม่รวมน้ำยาที่เลิกใช้')}
-            {' · '}จำนวน {filtered.length} รายการ · พิมพ์วันที่ {longDate(new Date())}
+            {' · '}จำนวน {filtered.length} รายการ
           </div>
         </div>
 
@@ -162,10 +212,10 @@ export default function TabAnnual() {
                   <th className="no-col">ที่</th>
                   <th>รายการ</th>
                   <th>หน่วยนับ</th>
-                  <th className="n">ยอดยกมา</th>
+                  <th className="n">ยอดยกมา<small>{dShort(period.start)}</small></th>
                   <th className="n">รับ</th>
                   <th className="n">เบิก</th>
-                  <th className="n end-h">คงเหลือ</th>
+                  <th className="n end-h">คงเหลือ<small>{dShort(period.lastDay)}</small></th>
                 </tr>
               </thead>
               {groups.map(g => (
@@ -204,6 +254,12 @@ export default function TabAnnual() {
         .as-table th:first-child { border-top-left-radius:10px; }
         .as-table th:last-child { border-top-right-radius:10px; }
         .as-table th.end-h { background:#3D7E66; color:#fff; }
+        .as-table th small { display:block; font-size:10.5px; font-weight:600; opacity:.8; }
+        .period-pick { display:flex; align-items:center; gap:4px; background:#EFF8F3; border:1.5px solid #C9E4D8; border-radius:14px; padding:4px; flex-wrap:wrap; }
+        .period-pick .pp-fy { font-size:13px; font-weight:800; color:#3D7E66; padding:0 10px; }
+        .period-pick button { border:none; background:none; border-radius:10px; padding:8px 14px; font-size:13px; font-weight:800; color:#3D7E66; cursor:pointer; font-family:inherit; }
+        .period-pick button.on { background:#3D7E66; color:#fff; }
+        .period-pick select { width:auto; height:36px; line-height:36px; font-size:14px; font-weight:700; color:#3D7E66; background-color:#fff; border-color:#C9E4D8; padding:0 34px 0 12px; }
         .as-table .n { text-align:right; white-space:nowrap; width:11%; }
         .as-table .no-col { width:40px; text-align:center; color:var(--muted); }
         .as-table .as-type td { background:var(--yellow-bg); color:#B07A00; font-weight:800; font-size:14px; padding:8px 12px; }

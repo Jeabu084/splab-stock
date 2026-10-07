@@ -128,12 +128,15 @@ export default function TabItems() {
             มูลค่าคงเหลือรวม: {totalValue.toLocaleString('th-TH',{minimumFractionDigits:2})} บาท
           </div>
         </div>
-        <div className="print-only" style={{ fontSize:10, color:'#555', marginBottom:6 }}>
-          พิมพ์วันที่ {new Date().toLocaleDateString('th-TH',{ day:'numeric', month:'long', year:'numeric' })}
-          {typeFilter.length>0 && ' · ประเภท: '+typeFilter.join(', ')}
-          {search && ' · ค้นหา: '+search}
-          {statusFilter.length>0 && ' · สถานะ: '+STATUSES.filter(s=>statusFilter.includes(s.key)).map(s=>s.label).join(', ')}
-        </div>
+        {(typeFilter.length>0 || search || statusFilter.length>0) && (
+          <div className="print-only" style={{ fontSize:10, color:'#555', marginBottom:6 }}>
+            {[
+              typeFilter.length>0 && 'ประเภท: '+typeFilter.join(', '),
+              search && 'ค้นหา: '+search,
+              statusFilter.length>0 && 'สถานะ: '+STATUSES.filter(s=>statusFilter.includes(s.key)).map(s=>s.label).join(', '),
+            ].filter(Boolean).join(' · ')}
+          </div>
+        )}
         <div className="no-print" style={{ fontSize:12, color:'var(--muted)', marginBottom:16 }}>ค้นหา กรองตามประเภท หรือ export ข้อมูลรายการน้ำยาทั้งหมด</div>
 
         <div className="no-print" style={{ display:'flex', gap:10, marginBottom:12, flexWrap:'wrap', alignItems:'center' }}>

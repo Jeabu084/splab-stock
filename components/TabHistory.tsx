@@ -14,7 +14,6 @@ function exportCSV(type: string, item: string, rows: any[], lotRemain: any[]) {
   lines.push('"Stock Card น้ำยา — SPLABSTOCK"')
   lines.push('"ประเภท","'+type+'"')
   lines.push('"รายการ","'+item+'"')
-  lines.push('"วันที่พิมพ์","'+new Date().toLocaleDateString('th-TH')+'"')
   lines.push('')
   lines.push('"วันที่","รับ/เบิก","Lot","Expire","รับ","เบิก","คงเหลือ","ผู้บันทึก"')
   rows.forEach(r=>lines.push([r.date?.slice(0,10),r.action,r.lot,r.expire?.slice(0,10)||'',r.qty_in||'',r.qty_out||'',r.balance,r.user_name].map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')))
@@ -146,7 +145,6 @@ export default function TabHistory() {
               <div><span className="lbl">ประเภท: </span><b>{selType}</b></div>
               <div><span className="lbl">รายการ: </span><b>{selItem}</b>{selHidden && <em className="disc">เลิกใช้</em>}</div>
               <div><span className="lbl">ปีงบประมาณ: </span><b>{toBE(fy)}</b> <span className="lbl" style={{ fontWeight:500, fontSize:12 }}>(1 ต.ค.{toBE(fy)-1} – 30 ก.ย.{toBE(fy)})</span></div>
-              <div><span className="lbl">วันที่พิมพ์: </span><b>{new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'})}</b></div>
               <div><span className="lbl">{balLabel}: </span><b style={{ color:'#2F6B55', fontSize:16 }}>{lastBal}</b></div>
             </div>
           </div>

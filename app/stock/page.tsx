@@ -18,7 +18,7 @@ const ALL_TABS = [
   { id: 'overview', label: 'Overview',      icon: 'ti-layout-grid',      bg: '#ECEAFF', fg: '#7B6EF6' },
   { id: 'usage',    label: 'Usage',         icon: 'ti-report-analytics', bg: '#C9E4D8', fg: '#4A9B7F' },
   { id: 'items',    label: 'รายการน้ำยา',   icon: 'ti-list-details',     bg: '#FFF6E0', fg: '#B07A00' },
-  { id: 'annual',   label: 'สรุปประจำปี',   icon: 'ti-calendar-stats',   bg: '#EFF8F3', fg: '#3D7E66' },
+  { id: 'annual',   label: 'สรุปยอดคงเหลือ', icon: 'ti-calendar-stats',   bg: '#EFF8F3', fg: '#3D7E66' },
   { id: 'history',  label: 'Stock Card',    icon: 'ti-file-text',        bg: '#EBF7F9', fg: '#4AA5B0' },
   { id: 'vendor',   label: 'Vendor',        icon: 'ti-star',             bg: '#EAF1FE', fg: '#5B97E8' },
   { id: 'settings', label: 'Settings',      icon: 'ti-settings',         bg: '#F3F4F6', fg: '#6B7280' },
@@ -144,6 +144,7 @@ export default function StockPage() {
           background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' stroke='%238FA0A8' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
           background-repeat:no-repeat; background-position:right 15px center; padding-right:38px;
         }
+        input, select, textarea { min-width:0; }
         input:focus, select:focus, textarea:focus { border-color:var(--teal); background:#fff; }
         input:disabled, select:disabled { opacity:0.6; }
         textarea { height:100px; line-height:1.5; padding:13px 15px; resize:vertical; }
@@ -178,6 +179,39 @@ export default function StockPage() {
         .fy-picker select:focus { background-color:transparent; border:none; }
         .fy-picker select option { color:var(--text); }
         .fy-sub { font-size:11px; opacity:.85; font-weight:600; }
+
+        /* RESPONSIVE: แท็บเล็ต */
+        @media (max-width:900px) {
+          .page-wrap { padding:16px 14px 40px!important; }
+          .shortcuts { grid-template-columns:repeat(5,1fr)!important; gap:8px; }
+          .sc { padding:14px 6px; border-radius:14px; }
+          .sc-icon { width:44px; height:44px; font-size:22px; margin-bottom:8px; border-radius:12px; }
+          .sc-label { font-size:12px; }
+          .grid2, .grid3 { grid-template-columns:1fr!important; }
+          .ov-grid { grid-template-columns:repeat(4,1fr); }
+        }
+        /* RESPONSIVE: มือถือ */
+        @media (max-width:600px) {
+          .page-wrap { padding:10px 10px 32px!important; }
+          .topbar { padding:14px 16px!important; border-radius:18px!important; }
+          .topbar .tb-logo { width:42px!important; height:42px!important; border-radius:12px!important; }
+          .topbar .tb-title { font-size:18px!important; }
+          .topbar .tb-sub { display:none; }
+          .fy-picker { margin-left:0; width:100%; }
+          .shortcuts { display:flex!important; overflow-x:auto; gap:8px; margin:0 -10px 14px; padding:2px 10px 6px; scroll-snap-type:x proximity; -webkit-overflow-scrolling:touch; }
+          .shortcuts::-webkit-scrollbar { display:none; }
+          .sc { flex:0 0 78px; padding:10px 4px; scroll-snap-align:start; }
+          .sc-icon { width:38px; height:38px; font-size:20px; margin-bottom:6px; }
+          .sc-label { font-size:11px; line-height:1.25; }
+          .card { padding:16px 14px; border-radius:16px; }
+          .card h2 { font-size:16px; }
+          .btn { padding:10px 16px; font-size:12.5px; }
+          .grid4 { grid-template-columns:1fr 1fr!important; }
+          .ov-grid { grid-template-columns:repeat(2,1fr); }
+          .type-dd { flex:1 1 100%; }
+          .type-dd-btn { min-width:0!important; max-width:none!important; width:100%; }
+          .form-row { grid-template-columns:1fr!important; }
+        }
 
         /* GRID HELPERS */
         .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
@@ -223,13 +257,13 @@ export default function StockPage() {
         <div className="page-wrap" style={{ maxWidth:1400, margin:'0 auto', padding:'20px 24px 48px' }}>
 
           {/* TOPBAR */}
-          <div className="no-print" style={{
+          <div className="no-print topbar" style={{
             borderRadius:24, padding:'16px 26px', marginBottom:18, color:'#fff',
             background:'var(--teal)', boxShadow:'0 8px 24px rgba(93,184,196,0.35)',
             display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:14,
           }}>
             <div style={{ display:'flex', alignItems:'center', gap:14 }}>
-              <div style={{ width:52, height:52, borderRadius:16, background:'rgba(255,255,255,0.22)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+              <div className="tb-logo" style={{ width:52, height:52, borderRadius:16, background:'rgba(255,255,255,0.22)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                 <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
                   <path d="M9 4C9 4 9 9 15 15C21 21 21 26 21 26" stroke="#fff" strokeWidth="2.6" strokeLinecap="round"/>
                   <path d="M21 4C21 4 21 9 15 15C9 21 9 26 9 26" stroke="#fff" strokeWidth="2.6" strokeLinecap="round"/>
@@ -244,8 +278,8 @@ export default function StockPage() {
                 </svg>
               </div>
               <div>
-                <div style={{ fontSize:22, fontWeight:900, letterSpacing:'0.5px' }}>SPLABSTOCK</div>
-                <div style={{ fontSize:13, marginTop:3, opacity:0.9, fontWeight:500 }}>Reagent Inventory &amp; Vendor Evaluation System</div>
+                <div className="tb-title" style={{ fontSize:22, fontWeight:900, letterSpacing:'0.5px' }}>SPLABSTOCK</div>
+                <div className="tb-sub" style={{ fontSize:13, marginTop:3, opacity:0.9, fontWeight:500 }}>Reagent Inventory &amp; Vendor Evaluation System</div>
               </div>
             </div>
             <div className="fy-picker">

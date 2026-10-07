@@ -187,7 +187,7 @@ export default function TabHome() {
           <h2 style={{ color:'var(--pv)' }}><i className="ti ti-package-import"></i> รับน้ำยา</h2>
 
           {/* แถว 1: วันที่รับ + ผู้ขาย */}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
+          <div className="form-row" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
             <div><div className="field-label">วันที่รับ</div><input type="date" value={rForm.date} onChange={e=>rSet('date',e.target.value)}/></div>
             <div><div className="field-label">ผู้ขาย</div>
               <select value={rForm.vendor_id} onChange={e=>rSet('vendor_id',e.target.value)}>
@@ -198,7 +198,7 @@ export default function TabHome() {
           </div>
 
           {/* แถว 2: เลขที่บิล + อุณหภูมิ */}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
+          <div className="form-row" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
             <div><div className="field-label">เลขที่บิล / Invoice *</div><input placeholder="INV-2025-001" value={rForm.invoice_no} onChange={e=>rSet('invoice_no',e.target.value)}/></div>
             <div><div className="field-label">อุณหภูมิขณะรับ *</div>
               <select value={rForm.temperature} onChange={e=>rSet('temperature',e.target.value)}>
@@ -209,7 +209,7 @@ export default function TabHome() {
           </div>
 
           {/* แถว 3: ประเภท + รายการ */}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
+          <div className="form-row" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
             <div><div className="field-label">ประเภท</div>
               <select value={rForm.type} onChange={e=>{rSet('type',e.target.value);rSet('item','')}}>
                 <option value="">— เลือกประเภท —</option>
@@ -225,13 +225,13 @@ export default function TabHome() {
           </div>
 
           {/* แถว 4: Lot + วันหมดอายุ */}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
+          <div className="form-row" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
             <div><div className="field-label">Lot</div><input placeholder="เช่น L2509-01" value={rForm.lot} onChange={e=>rSet('lot',e.target.value)}/></div>
             <div><div className="field-label">วันหมดอายุ</div><input type="date" value={rForm.expire} onChange={e=>rSet('expire',e.target.value)}/></div>
           </div>
 
           {/* แถว 5: จำนวน + หน่วย + ราคา */}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:10 }}>
+          <div className="form-row" style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:10 }}>
             <div><div className="field-label">จำนวนรับ</div><input type="number" min="1" placeholder="0" value={rForm.qty} onChange={e=>rSet('qty',e.target.value)}/></div>
             <div><div className="field-label">หน่วยนับ</div><input placeholder="ขวด, กล่อง" value={rForm.unit} onChange={e=>rSet('unit',e.target.value)}/></div>
             <div><div className="field-label">ราคา/หน่วย (฿)</div><input type="number" min="0" step="0.01" placeholder="0.00" value={rForm.unit_price} onChange={e=>rSet('unit_price',e.target.value)}/></div>
