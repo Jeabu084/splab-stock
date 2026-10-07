@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useFY, fyRange, toBE } from '@/lib/fiscal'
 
 const SCALE = [
   { v:5, label:'มากที่สุด' },
@@ -13,14 +14,6 @@ const PASS_PCT = 80
 // score_delivery → avg_delivery
 const avgKey = (k) => k.replace('score_','avg_')
 
-function currentFY() {
-  const d = new Date()
-  return d.getMonth()+1 >= 10 ? d.getFullYear()+1 : d.getFullYear()
-}
-// ต.ค.–ธ.ค. มักเป็นช่วงสรุปปีงบที่เพิ่งจบ
-function defaultFY() {
-  return new Date().getMonth()+1 >= 10 ? currentFY()-1 : currentFY()
-}
 const today = () => {
   const d = new Date()
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')
@@ -102,7 +95,7 @@ function fromSaved(e, criteria) {
 const fmt = (v, d=2) => v==null ? '—' : Number(v).toFixed(d)
 
 export default function VendorAnnualEval({ isAdmin, userName, criteria }) {
-  const [fy, setFy] = useState(defaultFY())
+  const { fy } = useFY()
   const [vendors, setVendors] = useState([])
   const [evals, setEvals] = useState({})
   const [billsBy, setBillsBy] = useState({})
@@ -112,9 +105,6 @@ export default function VendorAnnualEval({ isAdmin, userName, criteria }) {
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState(null)
-
-  const fyList = []
-  for (let f = currentFY(); f >= currentFY()-4; f--) fyList.push(f)
 
   useEffect(() => { load() }, [fy])
 
@@ -127,7 +117,7 @@ export default function VendorAnnualEval({ isAdmin, userName, criteria }) {
 
   async function load() {
     setLoading(true); setLoadErr('')
-    const start = (fy-1)+'-10-01', end = fy+'-10-01'
+    const { start, end } = fyRange(fy)
     const [{ data: v }, { data: ev, error: evErr }, { data: bills }] = await Promise.all([
       supabase.from('vendors').select('id,name').eq('is_active',true).order('name'),
       supabase.from('vendor_annual_evals').select('*').eq('fiscal_year',fy),
@@ -198,9 +188,7 @@ export default function VendorAnnualEval({ isAdmin, userName, criteria }) {
       <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet" />
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:10, marginBottom:6 }}>
         <h2 style={{ marginBottom:0 }}><i className="ti ti-file-certificate" style={{ color:'var(--bd)' }}></i> สรุปประเมินผู้ขายประจำปี</h2>
-        <select value={fy} onChange={e=>setFy(Number(e.target.value))} style={{ width:'auto', fontWeight:700, color:'var(--bd)', background:'var(--bb)', border:'none' }}>
-          {fyList.map(f => <option key={f} value={f}>ปีงบประมาณ {f+543}</option>)}
-        </select>
+        <span className="pill" style={{ background:'var(--bb)', color:'var(--bd)', fontSize:14, padding:'8px 16px' }}>ปีงบประมาณ {toBE(fy)}</span>
       </div>
       <div style={{ fontSize:12, color:'var(--muted)', marginBottom:16 }}>
         รวมผลประเมินรายบิล {criteria.length} หัวข้อ ตลอดปีงบ (ต.ค.{fy-1+543} – ก.ย.{fy+543}) · ผ่านเมื่อได้ {PASS_PCT}% ขึ้นไป
@@ -215,7 +203,7 @@ export default function VendorAnnualEval({ isAdmin, userName, criteria }) {
         <div style={{ overflowX:'auto' }}>
           <table>
             <thead>
-              <tr><th>ผู้ขาย</th><th style={{ textAlign:'center' }}>จำนวนบิล</th><th style={{ textAlign:'center' }}>คะแนนเฉลี่ย</th><th>ผล</th><th>สถานะ</th><th></th></tr>
+              <tr><th>ผู้ขาย</th><th style={{ textAlign:'center' }}>จำนวนบิล</th><th style={{ textAlign:'center' }}>คะแนนเฉลี่ย</th><th>ผล</th><th>สถานะ</th><th className="no-print"></th></tr>
             </thead>
             <tbody>
               {vendors.map(v => {
@@ -231,7 +219,7 @@ export default function VendorAnnualEval({ isAdmin, userName, criteria }) {
                       {e ? <span className="pill pill-ok"><i className="ti ti-signature" style={{ marginRight:4 }}></i>หัวหน้าสรุปแล้ว</span>
                          : <span className="pill" style={{ background:'var(--bg)', color:'var(--muted)' }}>รอหัวหน้าสรุป</span>}
                     </td>
-                    <td style={{ textAlign:'right' }}>
+                    <td className="no-print" style={{ textAlign:'right' }}>
                       <button className={'btn '+(e?'btn-outline':'btn-purple')} style={{ padding:'8px 16px', fontSize:12 }} onClick={()=>openForm(v)} disabled={!st.n} title={st.n?'':'ไม่มีการประเมินรายบิลในปีงบนี้'}>
                         <i className={'ti '+(e?'ti-file-text':'ti-file-certificate')}></i> {e ? 'ดู / พิมพ์' : 'เปิดสรุป A4'}
                       </button>

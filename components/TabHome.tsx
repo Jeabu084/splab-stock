@@ -108,7 +108,8 @@ export default function TabHome() {
     if (!issueDate) { setIMsg({text:'กรุณาเลือกวันที่เบิก', ok:false}); return }
     if (issueDate > today()) { setIMsg({text:'วันที่เบิกต้องไม่เกินวันนี้', ok:false}); return }
     const lotInfo = lots.find(l => l.lot===iLot)
-    if (lotInfo && Number(iQty) > Number(lotInfo.balance)) {
+    if (!lotInfo) { setIMsg({text:'Lot นี้ไม่ใช่ของรายการที่เลือก หรือไม่มีคงเหลือแล้ว — กรุณาเลือก Lot ใหม่', ok:false}); return }
+    if (Number(iQty) > Number(lotInfo.balance)) {
       setIMsg({text:'จำนวนที่เบิกเกินกว่าคงเหลือใน Lot นี้ (คงเหลือ '+lotInfo.balance+')', ok:false}); return
     }
     setISaving(true); setIMsg(null)
@@ -146,13 +147,13 @@ export default function TabHome() {
             </div>
           )}
           <Row label="ประเภท">
-            <select value={iType} onChange={e=>{setIType(e.target.value);setIItem('')}}>
+            <select value={iType} onChange={e=>{setIType(e.target.value);setIItem('');setILot('')}}>
               <option value="">— เลือกประเภท —</option>
               {types.map(t=><option key={t} value={t}>{t}</option>)}
             </select>
           </Row>
           <Row label="รายการ">
-            <select value={iItem} onChange={e=>setIItem(e.target.value)}>
+            <select value={iItem} onChange={e=>{setIItem(e.target.value);setILot('')}}>
               <option value="">— เลือกรายการ —</option>
               {(itemsByType[iType]||[]).map(i=><option key={i} value={i}>{i}</option>)}
             </select>

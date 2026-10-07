@@ -48,6 +48,7 @@ export function canAccess(role: UserRole, tabId: string): boolean {
     overview: ['admin', 'user', 'viewer'],
     usage:    ['admin', 'user', 'viewer'],
     items:    ['admin', 'user', 'viewer'],
+    annual:   ['admin', 'user', 'viewer'],
     history:  ['admin', 'user', 'viewer'],
     vendor:   ['admin'],
     settings: ['admin'],

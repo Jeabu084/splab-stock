@@ -2,10 +2,13 @@
 import { useState, useEffect } from 'react'
 import { getSession, clearSession, canAccess } from '@/lib/auth'
 import type { AppUser } from '@/lib/auth'
+import { FYProvider, defaultFY, fyList, toBE } from '@/lib/fiscal'
+import { preparePrint, cleanupPrint } from '@/lib/printPaginate'
 import TabHome from '@/components/TabHome'
 import TabOverview from '@/components/TabOverview'
 import TabUsage from '@/components/TabUsage'
 import TabItems from '@/components/TabItems'
+import TabAnnual from '@/components/TabAnnual'
 import TabHistory from '@/components/TabHistory'
 import TabVendor from '@/components/TabVendor'
 import TabSettings from '@/components/TabSettings'
@@ -15,6 +18,7 @@ const ALL_TABS = [
   { id: 'overview', label: 'Overview',      icon: 'ti-layout-grid',      bg: '#ECEAFF', fg: '#7B6EF6' },
   { id: 'usage',    label: 'Usage',         icon: 'ti-report-analytics', bg: '#C9E4D8', fg: '#4A9B7F' },
   { id: 'items',    label: 'รายการน้ำยา',   icon: 'ti-list-details',     bg: '#FFF6E0', fg: '#B07A00' },
+  { id: 'annual',   label: 'สรุปประจำปี',   icon: 'ti-calendar-stats',   bg: '#EFF8F3', fg: '#3D7E66' },
   { id: 'history',  label: 'Stock Card',    icon: 'ti-file-text',        bg: '#EBF7F9', fg: '#4AA5B0' },
   { id: 'vendor',   label: 'Vendor',        icon: 'ti-star',             bg: '#EAF1FE', fg: '#5B97E8' },
   { id: 'settings', label: 'Settings',      icon: 'ti-settings',         bg: '#F3F4F6', fg: '#6B7280' },
@@ -27,6 +31,17 @@ export default function StockPage() {
   const [user, setUser] = useState<AppUser | null>(null)
   const [activeTab, setActiveTab] = useState('overview')
   const [checked, setChecked] = useState(false)
+  const [fy, setFy] = useState(defaultFY())
+
+  // กด ⌘P / Ctrl+P ก็จัดหน้าให้เหมือนกดปุ่มพิมพ์ (หัวตารางซ้ำทุกหน้า)
+  useEffect(() => {
+    window.addEventListener('beforeprint', preparePrint)
+    window.addEventListener('afterprint', cleanupPrint)
+    return () => {
+      window.removeEventListener('beforeprint', preparePrint)
+      window.removeEventListener('afterprint', cleanupPrint)
+    }
+  }, [])
 
   useEffect(() => {
     const session = getSession()
@@ -155,6 +170,15 @@ export default function StockPage() {
         .ov-section-title { font-size:20px; font-weight:800; color:var(--teal-dark); margin:18px 0 8px; padding-left:2px; }
         .ov-section-title:first-child { margin-top:0; }
 
+        /* FISCAL YEAR PICKER */
+        .fy-picker { display:grid; grid-template-columns:auto 1fr; align-items:center; column-gap:8px; background:rgba(255,255,255,0.18); border:1.5px solid rgba(255,255,255,0.35); border-radius:16px; padding:6px 14px 6px 12px; margin-left:auto; }
+        .fy-picker > i { font-size:20px; grid-row:span 2; }
+        .fy-picker select { height:auto; line-height:1.3; background:transparent; border:none; color:#fff; font-size:16px; font-weight:800; padding:0 22px 0 0; width:auto; cursor:pointer;
+          background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' stroke='white' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>"); background-position:right 2px center; background-repeat:no-repeat; }
+        .fy-picker select:focus { background-color:transparent; border:none; }
+        .fy-picker select option { color:var(--text); }
+        .fy-sub { font-size:11px; opacity:.85; font-weight:600; }
+
         /* GRID HELPERS */
         .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
         .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
@@ -162,6 +186,7 @@ export default function StockPage() {
 
         .print-only { display:none; }
 
+        /* พิมพ์: ค่าพื้นฐาน (ใช้กับทุกการพิมพ์ รวมฟอร์มประเมินผู้ขาย A4) */
         @media print {
           @page { size:A4; margin:10mm; }
           * { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
@@ -169,6 +194,19 @@ export default function StockPage() {
           .print-only { display:block; }
           body, .page-bg { background:#fff!important; }
           .page-wrap { padding:0!important; max-width:none!important; }
+        }
+
+        /* พิมพ์: สไตล์รายงาน — ทำงานเมื่อ <html> มี class pg-print (ดู lib/printPaginate.ts)
+           ใช้ :where() เพื่อไม่เพิ่ม specificity ให้เหมือนเดิมตอนเป็น @media print */
+        :where(html.pg-print) {
+          * { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .page-bg { display:none!important; }
+          .no-print { display:none!important; }
+          .print-only { display:block; }
+          body { background:#fff!important; }
+          .pg-out { padding:0!important; margin:0!important; max-width:none!important; background:#fff; }
+          .pg-out div { overflow:visible!important; }
+          .pg-break { break-before:page; page-break-before:always; }
           .card { box-shadow:none; border-radius:0; padding:0; }
           .card h2 { font-size:14px; margin-bottom:4px; }
           .card h2 i { display:none; }
@@ -176,8 +214,7 @@ export default function StockPage() {
           table { font-size:10px; }
           th { padding:4px 6px; font-size:10px; color:#555; border-bottom:1px solid #999; }
           td { padding:3px 6px; border-bottom:1px solid #e5e5e5; }
-          thead { display:table-header-group; }
-          tr { break-inside:avoid; }
+          tr { break-inside:avoid; page-break-inside:avoid; }
           tr:hover td { background:transparent; }
         }
       `}</style>
@@ -209,6 +246,17 @@ export default function StockPage() {
               <div>
                 <div style={{ fontSize:22, fontWeight:900, letterSpacing:'0.5px' }}>SPLABSTOCK</div>
                 <div style={{ fontSize:13, marginTop:3, opacity:0.9, fontWeight:500 }}>Reagent Inventory &amp; Vendor Evaluation System</div>
+              </div>
+            </div>
+            <div className="fy-picker">
+              <i className="ti ti-calendar"></i>
+              <select value={fy} onChange={e=>setFy(Number(e.target.value))} aria-label="เลือกปีงบประมาณ">
+                {fyList().map(f => <option key={f} value={f}>ปีงบประมาณ {toBE(f)}</option>)}
+              </select>
+              <div className="fy-sub">
+                {['home','overview','items'].includes(activeTab)
+                  ? 'หน้านี้แสดงยอดปัจจุบัน ไม่ขึ้นกับปีงบ'
+                  : '1 ต.ค. '+String(toBE(fy)-1).slice(2)+' – 30 ก.ย. '+String(toBE(fy)).slice(2)}
               </div>
             </div>
             {user && (
@@ -247,13 +295,16 @@ export default function StockPage() {
           </div>
 
           {/* CONTENT */}
+          <FYProvider value={{ fy, setFy }}>
           {activeTab==='home'     && <TabHome />}
           {activeTab==='overview' && <TabOverview />}
           {activeTab==='usage'    && <TabUsage />}
           {activeTab==='items'    && <TabItems />}
+          {activeTab==='annual'   && <TabAnnual />}
           {activeTab==='history'  && <TabHistory />}
           {activeTab==='vendor'   && <TabVendor />}
           {activeTab==='settings' && <TabSettings />}
+          </FYProvider>
         </div>
       </div>
     </>

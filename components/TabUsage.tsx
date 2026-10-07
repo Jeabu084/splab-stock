@@ -1,26 +1,11 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useFY, fyRange, currentFY, toBE } from '@/lib/fiscal'
+import PrintButton from '@/components/PrintButton'
 
 const FY_MONTHS = [10,11,12,1,2,3,4,5,6,7,8,9]
 const MONTH_LABEL = {1:'ม.ค.',2:'ก.พ.',3:'มี.ค.',4:'เม.ย.',5:'พ.ค.',6:'มิ.ย.',7:'ก.ค.',8:'ส.ค.',9:'ก.ย.',10:'ต.ค.',11:'พ.ย.',12:'ธ.ค.'}
-
-function fyDateRange(fy) {
-  return { start: String(fy-1)+'-10-01', end: String(fy)+'-10-01' }
-}
-
-function currentFY() {
-  const now = new Date()
-  const m = now.getMonth() + 1
-  const y = now.getFullYear()
-  return m >= 10 ? y + 1 : y
-}
-
-// ช่วงเดือนแรกของปีงบ (ต.ค.) ข้อมูลปีงบใหม่ยังน้อย ให้เปิดปีงบที่แล้วเป็นค่าเริ่มต้น
-function defaultFY() {
-  const cur = currentFY()
-  return new Date().getMonth() + 1 === 10 ? cur - 1 : cur
-}
 
 // Supabase คืนได้สูงสุด 1000 แถวต่อ request จึงต้องดึงทีละหน้า
 async function fetchIssues(start, end) {
@@ -54,13 +39,12 @@ function exportCSV(grouped, fy) {
   const blob = new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8'})
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = 'usage_fy'+fy+'_'+new Date().toISOString().slice(0,10)+'.csv'
+  a.download = 'usage_ปีงบ'+toBE(fy)+'_'+new Date().toISOString().slice(0,10)+'.csv'
   a.click()
 }
 
 export default function TabUsage() {
-  const [fy, setFy] = useState(defaultFY())
-  const [fyList, setFyList] = useState([])
+  const { fy } = useFY()
   const [grouped, setGrouped] = useState([])
   const [loading, setLoading] = useState(true)
   const [elapsed, setElapsed] = useState(12)
@@ -69,25 +53,13 @@ export default function TabUsage() {
 
   async function loadData(fiscalYear) {
     setLoading(true)
-    const { start, end } = fyDateRange(fiscalYear)
+    const { start, end } = fyRange(fiscalYear)
 
     const [{ data: master }, issues] = await Promise.all([
       supabase.from('master_items').select('type,item').eq('is_hidden',false).order('type').order('item'),
       fetchIssues(start, end),
     ])
     if (!master) { setLoading(false); return }
-
-    const { data: fi } = await supabase.from('issues').select('date').order('date',{ascending:true}).limit(1)
-    if (fi && fi.length) {
-      const fd = new Date(fi[0].date)
-      const fFY = fd.getMonth() >= 9 ? fd.getFullYear()+1 : fd.getFullYear()
-      const cur = currentFY()
-      const list = []
-      for (let f = cur; f >= fFY; f--) list.push(f)
-      setFyList(list.length ? list : [cur])
-    } else {
-      setFyList([currentFY()])
-    }
 
     const now = new Date()
     const cur = currentFY()
@@ -124,20 +96,18 @@ export default function TabUsage() {
   }
 
   return (
-    <div>
+    <div data-print-landscape>
       <div className="card">
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6, flexWrap:'wrap', gap:10 }}>
           <h2 style={{ marginBottom:0 }}><i className="ti ti-report-analytics" style={{ color:'#4A9B7F' }}></i> Usage</h2>
           <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-            <select value={fy} onChange={e=>setFy(Number(e.target.value))} style={{ fontSize:14, fontWeight:700, background:'#C9E4D8', color:'#4A9B7F', border:'none', padding:'10px 16px', width:'auto' }}>
-              {fyList.map(f=><option key={f} value={f}>ปีงบ {f} (ต.ค.{f-1}-ก.ย.{f})</option>)}
-            </select>
-            <button className="btn btn-teal" onClick={()=>loadData(fy)}><i className="ti ti-refresh"></i> รีเฟรช</button>
-            <button className="btn btn-purple" onClick={()=>exportCSV(grouped,fy)}><i className="ti ti-download"></i> Export CSV</button>
+            <button className="btn btn-teal no-print" onClick={()=>loadData(fy)}><i className="ti ti-refresh"></i> รีเฟรช</button>
+            <button className="btn btn-purple no-print" onClick={()=>exportCSV(grouped,fy)}><i className="ti ti-download"></i> Export CSV</button>
+            <PrintButton fileName={'Usage_ปีงบ'+toBE(fy)} />
           </div>
         </div>
         <div style={{ fontSize:12, color:'var(--muted)', marginBottom:16 }}>
-          ปีงบประมาณ ต.ค.-ก.ย. <span style={{ color:'#4A9B7F', fontWeight:700, marginLeft:8 }}>เฉลี่ย {elapsed} เดือน</span>
+          ปีงบประมาณ {toBE(fy)} (ต.ค.{toBE(fy)-1} – ก.ย.{toBE(fy)}) <span style={{ color:'#4A9B7F', fontWeight:700, marginLeft:8 }}>เฉลี่ย {elapsed} เดือน</span>
         </div>
         {loading ? (
           <div style={{ textAlign:'center', padding:32, color:'var(--muted)' }}>กำลังโหลด...</div>
@@ -146,7 +116,7 @@ export default function TabUsage() {
             {grouped.map(group => (
               <div key={group.type}>
                 <div className="ov-section-title">{group.type}</div>
-                <table style={{ minWidth:1100 }}>
+                <table className="usage-table" style={{ minWidth:1100 }}>
                   <thead>
                     <tr>
                       <th style={{ minWidth:160 }}>ชื่อน้ำยา</th>
@@ -176,6 +146,14 @@ export default function TabUsage() {
           </div>
         )}
       </div>
+      <style>{`
+        :where(html.pg-print) {
+          .usage-table { min-width:0!important; table-layout:fixed; }
+          .usage-table th, .usage-table td { font-size:9pt!important; padding:3px 4px!important; min-width:0!important; }
+          .usage-table th:first-child, .usage-table td:first-child { width:24%; }
+          .ov-section-title { font-size:11pt; margin:8px 0 3px; break-after:avoid; }
+        }
+      `}</style>
     </div>
   )
 }

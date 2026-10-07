@@ -3,6 +3,15 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getSession } from '@/lib/auth'
 import VendorAnnualEval from '@/components/VendorAnnualEval'
+import { useFY, fyRange, toBE } from '@/lib/fiscal'
+import PrintButton from '@/components/PrintButton'
+
+function grade(pct) {
+  if (pct >= 80) return 'ดีมาก'
+  if (pct >= 70) return 'ดี'
+  if (pct >= 60) return 'พอใช้'
+  return 'ต้องปรับปรุง'
+}
 
 const SCORE_LABELS = [
   { key: 'score_delivery',  label: '1. ความถูกต้องในการจัดส่งสินค้าและราคา' },
@@ -28,7 +37,9 @@ export default function TabVendor() {
 
   useEffect(() => { setUser(getSession()) }, [])
 
-  useEffect(() => { loadAll() }, [])
+  const { fy } = useFY()
+
+  useEffect(() => { loadAll() }, [fy])
 
   async function loadAll() {
     setLoading(true)
@@ -38,9 +49,26 @@ export default function TabVendor() {
         .not('invoice_no','like','UNKNOWN-%')
         .order('date',{ascending:false}),
       supabase.from('vendor_scores').select('vendor_id,invoice_no'),
-      supabase.from('vendor_score_summary').select('*'),
+      supabase.from('vendor_scores').select('vendor_id,vendors(name),'+SCORE_LABELS.map(l=>l.key).join(','))
+        .gte('date', fyRange(fy).start).lt('date', fyRange(fy).end),
     ])
-    setSummary(summaryData || [])
+
+    // สรุปคะแนนเฉพาะบิลที่ประเมินในปีงบที่เลือก
+    const agg = {}
+    ;(summaryData||[]).forEach((r: any) => {
+      const a = agg[r.vendor_id] ||= { vendor_id:r.vendor_id, vendor_name:r.vendors?.name || '(ไม่พบชื่อผู้ขาย)', n:0, sums:{} }
+      a.n++
+      SCORE_LABELS.forEach(l => { a.sums[l.key] = (a.sums[l.key]||0) + (Number(r[l.key])||0) })
+    })
+    const sum = Object.values(agg).map((a: any) => {
+      const total = SCORE_LABELS.reduce((t,l)=>t+a.sums[l.key],0)/a.n
+      const pct = Math.round(total/(SCORE_LABELS.length*5)*1000)/10
+      const row: any = { vendor_id:a.vendor_id, vendor_name:a.vendor_name, eval_count:a.n, avg_score:Math.round(total*100)/100, pct, grade:grade(pct) }
+      SCORE_LABELS.forEach(l => { row[l.key.replace('score_','avg_')] = a.sums[l.key]/a.n })
+      return row
+    }).sort((x,y) => y.pct-x.pct || x.vendor_name.localeCompare(y.vendor_name))
+    setSummary(sum)
+    setSel(null)
 
     const doneSet = new Set((scoresData||[]).map(s => s.vendor_id+'||'+s.invoice_no))
 
@@ -102,9 +130,9 @@ export default function TabVendor() {
       <div className="card" style={{ marginBottom:16 }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
           <h2 style={{ marginBottom:0 }}><i className="ti ti-clock" style={{ color:'var(--bd)' }}></i> รอประเมิน</h2>
-          <button className="btn btn-teal" onClick={loadAll}><i className="ti ti-refresh"></i> รีเฟรช</button>
+          <button className="btn btn-teal no-print" onClick={loadAll}><i className="ti ti-refresh"></i> รีเฟรช</button>
         </div>
-        <div style={{ fontSize:12, color:'var(--muted)', marginBottom:16 }}>บิลรับสินค้าที่ยังไม่ได้ประเมินผู้ขาย (1 บิล = 1 ผู้ขาย + 1 เลขที่บิล)</div>
+        <div style={{ fontSize:12, color:'var(--muted)', marginBottom:16 }}>บิลรับสินค้าที่ยังไม่ได้ประเมินผู้ขาย (1 บิล = 1 ผู้ขาย + 1 เลขที่บิล) · แสดงทุกปีงบ เพื่อไม่ให้บิลค้างตกหล่น</div>
         {loading ? (
           <div style={{ textAlign:'center', padding:32, color:'var(--muted)' }}>กำลังโหลด...</div>
         ) : waiting.length === 0 ? (
@@ -113,7 +141,7 @@ export default function TabVendor() {
           <div style={{ overflowX:'auto' }}>
             <table>
               <thead>
-                <tr><th>ผู้ขาย</th><th>เลขที่บิล</th><th>วันที่รับ</th><th>รายการในบิล</th><th></th></tr>
+                <tr><th>ผู้ขาย</th><th>เลขที่บิล</th><th>วันที่รับ</th><th>รายการในบิล</th><th className="no-print"></th></tr>
               </thead>
               <tbody>
                 {waiting.map((bill, i) => (
@@ -126,7 +154,7 @@ export default function TabVendor() {
                         <div key={j}>{it.item} — {it.qty}{it.unit?' '+it.unit:''}</div>
                       ))}
                     </td>
-                    <td>
+                    <td className="no-print">
                       <button className="btn btn-purple" style={{ padding:'8px 16px', fontSize:12 }} onClick={()=>openModal(bill)}>
                         <i className="ti ti-star"></i> ประเมิน
                       </button>
@@ -140,15 +168,18 @@ export default function TabVendor() {
       </div>
 
       <div className="card" style={{ marginBottom: sel ? 16 : 0 }}>
-        <h2><i className="ti ti-chart-bar" style={{ color:'var(--bd)' }}></i> สรุปคะแนนผู้ขาย</h2>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, flexWrap:'wrap', marginBottom:18 }}>
+          <h2 style={{ marginBottom:0 }}><i className="ti ti-chart-bar" style={{ color:'var(--bd)' }}></i> สรุปคะแนนผู้ขาย · ปีงบ {toBE(fy)}</h2>
+          <PrintButton fileName={'สรุปคะแนนผู้ขาย_ปีงบ'+toBE(fy)} />
+        </div>
         <div style={{ fontSize:12, color:'var(--muted)', marginBottom:16 }}>เกณฑ์: ≥80% = ดีมาก · 70–79% = ดี · 60–69% = พอใช้ · &lt;60% = ต้องปรับปรุง</div>
         {summary.length === 0 ? (
-          <div style={{ textAlign:'center', padding:32, color:'var(--muted)' }}>ยังไม่มีข้อมูลการประเมิน</div>
+          <div style={{ textAlign:'center', padding:32, color:'var(--muted)' }}>ยังไม่มีการประเมินในปีงบ {toBE(fy)}</div>
         ) : (
           <div style={{ overflowX:'auto' }}>
             <table>
               <thead>
-                <tr><th>ผู้ขาย</th><th>จำนวนครั้ง</th><th>คะแนนเฉลี่ย</th><th>%</th><th>ระดับ</th><th></th></tr>
+                <tr><th>ผู้ขาย</th><th>จำนวนครั้ง</th><th>คะแนนเฉลี่ย</th><th>%</th><th>ระดับ</th><th className="no-print"></th></tr>
               </thead>
               <tbody>
                 {summary.map((v, i) => {
@@ -160,7 +191,7 @@ export default function TabVendor() {
                       <td>{v.avg_score} / 35</td>
                       <td style={{ fontWeight:800 }}>{v.pct}%</td>
                       <td><span className={'pill '+gradeClass(v.grade)}>{v.grade}</span></td>
-                      <td style={{ color:'var(--bd)', fontSize:12, fontWeight:700 }}>{isSel?'▲ ซ่อน':'▼ รายละเอียด'}</td>
+                      <td className="no-print" style={{ color:'var(--bd)', fontSize:12, fontWeight:700 }}>{isSel?'▲ ซ่อน':'▼ รายละเอียด'}</td>
                     </tr>
                   )
                 })}
