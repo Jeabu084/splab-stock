@@ -2,27 +2,16 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 
-const CRITERIA = [
-  'คุณภาพน้ำยา/สินค้า/บริการ ได้มาตรฐานผ่านการรับรอง',
-  'บนกล่องที่บรรจุผลิตภัณฑ์ มีรายละเอียดต่างๆ ระบุไว้อย่างชัดเจน',
-  'รายการสั่งซื้อมีวันหมดอายุไม่น้อยกว่า 1 ปี ยกเว้นงานโลหิตวิทยา',
-  'ใช้ปฏิบัติงานได้ตาม Specification ที่ผู้ขายได้ให้ไว้',
-  'ส่งสินค้าถูกต้องตรงตามรายการสั่งซื้อเอกสารใบเสนอราคา/ใบส่ง ถูกต้องครบถ้วนตามที่ตกลงกันไว้',
-  'ส่งมอบน้ำยา/สินค้า/บริการตามรายการสั่งภายในเวลาที่กำหนด',
-  'การบรรจุสินค้าเพื่อไม่ให้เกิดความเสียหายระหว่างการขนส่งและอุณหภูมินำส่ง ถูกต้องตามกำหนดบนข้างกล่องบรรจุ',
-  'สามารถส่งมอบสินค้าได้ในกรณีเร่งด่วน',
-  'การบริการหลังการขาย',
-  'ผู้แทนขายสามารถแก้ไขปัญหาของลูกค้า',
-]
 const SCALE = [
-  { v:10, label:'มากที่สุด' },
-  { v:8,  label:'มาก' },
-  { v:6,  label:'ปานกลาง' },
-  { v:4,  label:'พอใช้' },
-  { v:2,  label:'ควรปรับปรุง' },
+  { v:5, label:'มากที่สุด' },
+  { v:4, label:'มาก' },
+  { v:3, label:'ปานกลาง' },
+  { v:2, label:'พอใช้' },
+  { v:1, label:'ควรปรับปรุง' },
 ]
-const PASS_SCORE = 80
-const SKEYS = CRITERIA.map((_,i) => 's'+(i+1))
+const PASS_PCT = 80
+// score_delivery → avg_delivery
+const avgKey = (k) => k.replace('score_','avg_')
 
 function currentFY() {
   const d = new Date()
@@ -91,13 +80,32 @@ function SignaturePad({ value, onChange, disabled }) {
   )
 }
 
-const EMPTY_FORM = { scores:{}, suggestion:'', evaluator_name:'', pos1:'', pos2:'', signature:'', eval_date:today() }
+const EMPTY_FORM = { suggestion:'', evaluator_name:'', pos1:'', pos2:'', signature:'', eval_date:today() }
 
-export default function VendorAnnualEval({ isAdmin, userName }) {
+// รวมคะแนนรายบิลของผู้ขายในปีงบ → ค่าเฉลี่ยรายหัวข้อ
+function summarize(bills, criteria) {
+  const n = bills.length
+  const avgs = {}
+  criteria.forEach(c => {
+    avgs[avgKey(c.key)] = n ? bills.reduce((t,b)=>t+(Number(b[c.key])||0),0)/n : null
+  })
+  const totalAvg = n ? criteria.reduce((t,c)=>t+avgs[avgKey(c.key)],0) : 0
+  const pct = n ? totalAvg/(criteria.length*5)*100 : 0
+  return { n, avgs, totalAvg, pct, passed: pct >= PASS_PCT }
+}
+// ข้อมูลที่บันทึกไว้ (snapshot ณ วันที่หัวหน้าสรุป)
+function fromSaved(e, criteria) {
+  const avgs = {}
+  criteria.forEach(c => { const v = e[avgKey(c.key)]; avgs[avgKey(c.key)] = v==null ? null : Number(v) })
+  return { n:e.bill_count, avgs, totalAvg:Number(e.total_avg), pct:Number(e.pct), passed:e.passed }
+}
+const fmt = (v, d=2) => v==null ? '—' : Number(v).toFixed(d)
+
+export default function VendorAnnualEval({ isAdmin, userName, criteria }) {
   const [fy, setFy] = useState(defaultFY())
   const [vendors, setVendors] = useState([])
   const [evals, setEvals] = useState({})
-  const [billRef, setBillRef] = useState({})
+  const [billsBy, setBillsBy] = useState({})
   const [loading, setLoading] = useState(true)
   const [loadErr, setLoadErr] = useState('')
   const [open, setOpen] = useState(null)
@@ -123,20 +131,16 @@ export default function VendorAnnualEval({ isAdmin, userName }) {
     const [{ data: v }, { data: ev, error: evErr }, { data: bills }] = await Promise.all([
       supabase.from('vendors').select('id,name').eq('is_active',true).order('name'),
       supabase.from('vendor_annual_evals').select('*').eq('fiscal_year',fy),
-      supabase.from('vendor_scores').select('vendor_id,score_delivery,score_leadtime,score_expiry,score_coldchain,score_quality,score_defect,score_service').gte('date',start).lt('date',end),
+      supabase.from('vendor_scores').select('vendor_id,invoice_no,date,note,'+criteria.map(c=>c.key).join(',')).gte('date',start).lt('date',end).order('date'),
     ])
-    if (evErr) setLoadErr('ยังไม่พบตาราง vendor_annual_evals — กรุณารันไฟล์ supabase/vendor_annual_evals.sql ใน Supabase SQL Editor ก่อน ('+evErr.message+')')
+    if (evErr) setLoadErr('ยังไม่พบตาราง vendor_annual_evals เวอร์ชันล่าสุด — กรุณารันไฟล์ supabase/vendor_annual_evals.sql ใน Supabase SQL Editor ('+evErr.message+')')
     setVendors(v||[])
     const em = {}
     ;(ev||[]).forEach(r => { em[r.vendor_id] = r })
     setEvals(em)
     const bm = {}
-    ;(bills||[]).forEach(b => {
-      const s = ['score_delivery','score_leadtime','score_expiry','score_coldchain','score_quality','score_defect','score_service'].reduce((t,k)=>t+(Number(b[k])||0),0)
-      if (!bm[b.vendor_id]) bm[b.vendor_id] = { n:0, sum:0 }
-      bm[b.vendor_id].n++; bm[b.vendor_id].sum += s
-    })
-    setBillRef(bm)
+    ;(bills||[]).forEach((b: any) => { (bm[b.vendor_id] ||= []).push(b) })
+    setBillsBy(bm)
     setLoading(false)
   }
 
@@ -145,7 +149,6 @@ export default function VendorAnnualEval({ isAdmin, userName }) {
     if (e) {
       const [pos1='', pos2=''] = (e.evaluator_position||'').split('\n')
       setForm({
-        scores: Object.fromEntries(SKEYS.map(k => [k, e[k]])),
         suggestion: e.suggestion||'', evaluator_name: e.evaluator_name||'',
         pos1, pos2, signature: e.signature||'', eval_date: e.eval_date||today(),
       })
@@ -157,16 +160,23 @@ export default function VendorAnnualEval({ isAdmin, userName }) {
   }
 
   const set = (k,v) => setForm(f => ({ ...f, [k]:v }))
-  const total = SKEYS.reduce((s,k) => s+(form.scores[k]||0), 0)
-  const allScored = SKEYS.every(k => form.scores[k])
-  const passed = total >= PASS_SCORE
+  const bills = open ? (billsBy[open.id]||[]) : []
+  const live = summarize(bills, criteria)
+  const saved = open && evals[open.id]
+  // แสดงตามที่หัวหน้าสรุปไว้ ถ้ายังไม่สรุปใช้ข้อมูลล่าสุด
+  const sheet = saved ? fromSaved(saved, criteria) : live
+  const stale = saved && live.n !== saved.bill_count
+  const notes = bills.filter(b => b.note && b.note.trim())
 
   async function save() {
-    if (!allScored) { setMsg({ ok:false, text:'กรุณาให้คะแนนให้ครบทั้ง 10 ข้อ' }); return }
+    if (!live.n) { setMsg({ ok:false, text:'ผู้ขายรายนี้ยังไม่มีการประเมินรายบิลในปีงบนี้' }); return }
     if (!form.evaluator_name.trim()) { setMsg({ ok:false, text:'กรุณากรอกชื่อผู้ประเมิน' }); return }
     setSaving(true); setMsg(null)
+    const r2 = (x) => Math.round(x*100)/100
     const { error } = await supabase.from('vendor_annual_evals').upsert({
-      vendor_id: open.id, fiscal_year: fy, ...form.scores, total, passed,
+      vendor_id: open.id, fiscal_year: fy, bill_count: live.n,
+      ...Object.fromEntries(Object.entries(live.avgs).map(([k,v]) => [k, r2(v)])),
+      total_avg: r2(live.totalAvg), pct: r2(live.pct), passed: live.passed,
       suggestion: form.suggestion || null,
       evaluator_name: form.evaluator_name.trim(),
       evaluator_position: [form.pos1, form.pos2].map(s=>s.trim()).filter(Boolean).join('\n') || null,
@@ -177,7 +187,7 @@ export default function VendorAnnualEval({ isAdmin, userName }) {
     }, { onConflict:'vendor_id,fiscal_year' })
     setSaving(false)
     if (error) { setMsg({ ok:false, text:'บันทึกไม่สำเร็จ: '+error.message }); return }
-    setMsg({ ok:true, text:'บันทึกสรุปประเมินเรียบร้อย — '+total+' คะแนน ('+(passed?'ผ่าน':'ไม่ผ่าน')+')' })
+    setMsg({ ok:true, text:'บันทึกสรุปประเมินเรียบร้อย — '+live.pct.toFixed(1)+'% ('+(live.passed?'ผ่าน':'ไม่ผ่าน')+')' })
     load()
   }
 
@@ -193,7 +203,7 @@ export default function VendorAnnualEval({ isAdmin, userName }) {
         </select>
       </div>
       <div style={{ fontSize:12, color:'var(--muted)', marginBottom:16 }}>
-        แบบ FM-LA-019 · 10 ข้อ ข้อละ 10 คะแนน · ผ่านเมื่อได้ {PASS_SCORE} คะแนนขึ้นไป
+        รวมผลประเมินรายบิล {criteria.length} หัวข้อ ตลอดปีงบ (ต.ค.{fy-1+543} – ก.ย.{fy+543}) · ผ่านเมื่อได้ {PASS_PCT}% ขึ้นไป
         {!isAdmin && ' · บันทึกสรุปได้เฉพาะ Admin (หัวหน้างาน)'}
       </div>
 
@@ -205,26 +215,25 @@ export default function VendorAnnualEval({ isAdmin, userName }) {
         <div style={{ overflowX:'auto' }}>
           <table>
             <thead>
-              <tr><th>ผู้ขาย</th><th>อ้างอิงการประเมินรายบิล</th><th style={{ textAlign:'center' }}>คะแนนประจำปี</th><th>ผล</th><th></th></tr>
+              <tr><th>ผู้ขาย</th><th style={{ textAlign:'center' }}>จำนวนบิล</th><th style={{ textAlign:'center' }}>คะแนนเฉลี่ย</th><th>ผล</th><th>สถานะ</th><th></th></tr>
             </thead>
             <tbody>
               {vendors.map(v => {
                 const e = evals[v.id]
-                const b = billRef[v.id]
+                const st = e ? fromSaved(e, criteria) : summarize(billsBy[v.id]||[], criteria)
                 return (
                   <tr key={v.id}>
                     <td style={{ fontWeight:700 }}>{v.name}</td>
-                    <td style={{ fontSize:12, color:'var(--muted)' }}>
-                      {b ? b.n+' บิล · เฉลี่ย '+Math.round(b.sum/(b.n*35)*100)+'%' : '—'}
-                    </td>
-                    <td style={{ textAlign:'center', fontWeight:800 }}>{e ? e.total+' / 100' : '—'}</td>
+                    <td style={{ textAlign:'center' }}>{st.n || '—'}</td>
+                    <td style={{ textAlign:'center', fontWeight:800 }}>{st.n ? fmt(st.totalAvg)+' / 35 ('+st.pct.toFixed(1)+'%)' : '—'}</td>
+                    <td>{st.n ? <span className={'pill '+(st.passed?'pill-ok':'pill-danger')}>{st.passed?'ผ่าน':'ไม่ผ่าน'}</span> : '—'}</td>
                     <td>
-                      {e ? <span className={'pill '+(e.passed?'pill-ok':'pill-danger')}>{e.passed?'ผ่าน':'ไม่ผ่าน'}</span>
-                         : <span className="pill" style={{ background:'var(--bg)', color:'var(--muted)' }}>ยังไม่ประเมิน</span>}
+                      {e ? <span className="pill pill-ok"><i className="ti ti-signature" style={{ marginRight:4 }}></i>หัวหน้าสรุปแล้ว</span>
+                         : <span className="pill" style={{ background:'var(--bg)', color:'var(--muted)' }}>รอหัวหน้าสรุป</span>}
                     </td>
                     <td style={{ textAlign:'right' }}>
-                      <button className={'btn '+(e?'btn-outline':'btn-purple')} style={{ padding:'8px 16px', fontSize:12 }} onClick={()=>openForm(v)}>
-                        <i className={'ti '+(e?'ti-file-text':'ti-pencil')}></i> {e ? 'ดู / พิมพ์' : (isAdmin ? 'ประเมิน' : 'ดูแบบฟอร์ม')}
+                      <button className={'btn '+(e?'btn-outline':'btn-purple')} style={{ padding:'8px 16px', fontSize:12 }} onClick={()=>openForm(v)} disabled={!st.n} title={st.n?'':'ไม่มีการประเมินรายบิลในปีงบนี้'}>
+                        <i className={'ti '+(e?'ti-file-text':'ti-file-certificate')}></i> {e ? 'ดู / พิมพ์' : 'เปิดสรุป A4'}
                       </button>
                     </td>
                   </tr>
@@ -252,52 +261,67 @@ export default function VendorAnnualEval({ isAdmin, userName }) {
               </div>
             </div>
             {msg && <div className={'pill no-print '+(msg.ok?'pill-ok':'pill-danger')} style={{ display:'block', padding:'10px 14px', fontSize:13, marginBottom:10 }}>{msg.text}</div>}
-            {isAdmin && <div className="no-print annual-hint">คลิกช่องคะแนนเพื่อติ๊ก ✓ · กรอกข้อเสนอแนะ ชื่อ ตำแหน่ง และเซ็นในกรอบลายเซ็นได้เลย</div>}
+            {stale && <div className="pill pill-warn no-print" style={{ display:'block', padding:'10px 14px', fontSize:13, marginBottom:10 }}>
+              มีการประเมินรายบิลเปลี่ยนไปหลังหัวหน้าสรุป (ตอนสรุป {saved.bill_count} บิล · ตอนนี้ {live.n} บิล){isAdmin ? ' — กด "สรุปประเมินโดยหัวหน้างาน" อีกครั้งเพื่ออัปเดต' : ''}
+            </div>}
+            {notes.length>0 && (
+              <div className="annual-notes no-print">
+                <b>หมายเหตุจากการประเมินรายบิล</b> (ใช้ประกอบการเขียนข้อเสนอแนะ)
+                {notes.map((b,i) => <div key={i}>• {b.date} · {b.invoice_no}: {b.note}</div>)}
+              </div>
+            )}
 
             <div className="a4-sheet">
               <div className="a4-meta">
                 <span>ฉบับที่A</span><span>แก้ไขครั้งที่0</span>
                 <span style={{ textAlign:'right' }}>FM-LA-019<br/>วันที่ประกาศใช้ 1 ธ.ค.2565</span>
               </div>
-              <div className="a4-title">แบบประเมินผู้ขาย เวชภัณฑ์น้ำยาทางห้องปฏิบัติการ</div>
+              <div className="a4-title">แบบสรุปประเมินผู้ขาย เวชภัณฑ์น้ำยาทางห้องปฏิบัติการ</div>
               <div className="a4-title">ปีงบประมาณ <span className="a4-fill">{fy+543}</span></div>
               <div className="a4-company"><b>ชื่อบริษัท :</b> <span className="a4-fill wide">{open.name}</span></div>
+              <div className="a4-period">
+                ข้อมูลจากการประเมินรายบิล ระหว่าง 1 ต.ค.{fy-1+543} – 30 ก.ย.{fy+543} จำนวน <b>{sheet.n}</b> บิล (แสดงค่าเฉลี่ยรายหัวข้อ)
+              </div>
 
               <table className="a4-table">
                 <thead>
                   <tr>
                     <th rowSpan={2} className="crit-h">รายการประเมิน</th>
                     <th colSpan={5}>ระดับคะแนน / ความพึงพอใจ</th>
+                    <th rowSpan={2} className="avg-h">คะแนน<br/>เฉลี่ย</th>
                   </tr>
                   <tr>
                     {SCALE.map(s => <th key={s.v} className="scale-h">{s.v}<br/><span>{s.label}</span></th>)}
                   </tr>
                 </thead>
                 <tbody>
-                  {CRITERIA.map((c,i) => {
-                    const k = SKEYS[i]
+                  {criteria.map(c => {
+                    const avg = sheet.avgs[avgKey(c.key)]
+                    const level = avg==null ? null : Math.min(5, Math.max(1, Math.round(avg)))
                     return (
-                      <tr key={k}>
-                        <td className="crit">{i+1}. {c}</td>
+                      <tr key={c.key}>
+                        <td className="crit">{c.label}</td>
                         {SCALE.map(s => (
-                          <td key={s.v} className={'cell'+(ro?'':' clickable')+(form.scores[k]===s.v?' on':'')}
-                              onClick={()=>!ro && setForm(f=>({ ...f, scores:{ ...f.scores, [k]:s.v } }))}>
-                            {form.scores[k]===s.v ? '✓' : ''}
-                          </td>
+                          <td key={s.v} className={'cell'+(level===s.v?' on':'')}>{level===s.v ? '✓' : ''}</td>
                         ))}
+                        <td className="avg">{fmt(avg)}</td>
                       </tr>
                     )
                   })}
+                  <tr className="total-row">
+                    <td className="crit" colSpan={6} style={{ textAlign:'right', fontWeight:700 }}>รวมคะแนนเฉลี่ย (เต็ม {criteria.length*5})</td>
+                    <td className="avg">{fmt(sheet.totalAvg)}</td>
+                  </tr>
                 </tbody>
               </table>
 
               <div className="a4-summary">
-                <div><b>รวมคะแนนที่ได้</b> <span className="a4-fill">{allScored ? total : (total || '')}</span> <b>คะแนน</b></div>
-                <div><b>เกณฑ์การประเมินผ่าน {PASS_SCORE} คะแนนขึ้นไป</b></div>
+                <div><b>คะแนนที่ได้</b> <span className="a4-fill">{fmt(sheet.totalAvg)}</span> <b>/ {criteria.length*5} คะแนน คิดเป็น</b> <span className="a4-fill">{sheet.pct.toFixed(1)}</span> <b>%</b></div>
+                <div><b>เกณฑ์การประเมินผ่าน {PASS_PCT}% ขึ้นไป</b></div>
                 <div className="a4-result">
                   <b>สรุปการประเมิน</b>
-                  <span className="a4-box">{allScored && passed ? '✓' : ''}</span> ผ่าน
-                  <span className="a4-box" style={{ marginLeft:48 }}>{allScored && !passed ? '✓' : ''}</span> ไม่ผ่าน
+                  <span className="a4-box">{sheet.n && sheet.passed ? '✓' : ''}</span> ผ่าน
+                  <span className="a4-box" style={{ marginLeft:48 }}>{sheet.n && !sheet.passed ? '✓' : ''}</span> ไม่ผ่าน
                 </div>
               </div>
 
@@ -339,7 +363,6 @@ export default function VendorAnnualEval({ isAdmin, userName }) {
         .annual-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:100; overflow-y:auto; padding:24px 12px; }
         .annual-wrap { max-width:210mm; margin:0 auto; }
         .annual-toolbar { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; background:#fff; border-radius:16px; padding:12px 16px; margin-bottom:10px; }
-        .annual-hint { color:#fff; font-size:13px; margin:0 4px 10px; opacity:.9; }
 
         .a4-sheet { background:#fff; width:210mm; max-width:100%; min-height:297mm; margin:0 auto; padding:14mm 18mm; box-shadow:0 10px 40px rgba(0,0,0,0.3); color:#000; font-size:15px; line-height:1.55; overflow-x:auto; }
         .a4-sheet, .a4-sheet * { font-family:'Sarabun','Noto Sans Thai',sans-serif; }
@@ -354,13 +377,16 @@ export default function VendorAnnualEval({ isAdmin, userName }) {
         .a4-sheet table.a4-table { width:100%; border-collapse:collapse; font-size:14px; }
         .a4-sheet .a4-table th, .a4-sheet .a4-table td { border:1px solid #000; padding:4px 6px; color:#000; background:#fff; font-weight:400; }
         .a4-sheet .a4-table th { text-align:center; font-weight:700; vertical-align:middle; }
-        .a4-sheet .a4-table th.crit-h { width:58%; }
+        .a4-sheet .a4-table th.crit-h { width:50%; }
         .a4-sheet .a4-table th.scale-h { font-weight:400; font-size:13px; line-height:1.3; width:8.4%; }
         .a4-sheet .a4-table th.scale-h span { font-size:12px; }
         .a4-sheet .a4-table td.crit { line-height:1.5; }
         .a4-sheet .a4-table td.cell { text-align:center; font-size:20px; font-weight:700; color:#1a237e; }
-        .a4-sheet .a4-table td.cell.clickable { cursor:pointer; }
-        .a4-sheet .a4-table td.cell.clickable:hover { background:#EAF1FE; }
+        .a4-sheet .a4-table th.avg-h { width:11%; font-size:13px; line-height:1.3; }
+        .a4-sheet .a4-table td.avg { text-align:center; font-weight:700; }
+        .a4-sheet .a4-table tr.total-row td { font-weight:700; }
+        .a4-period { font-size:14px; margin:-6px 0 10px; }
+        .annual-notes { background:#FFF6E0; color:#7a5600; border-radius:14px; padding:10px 14px; font-size:13px; margin-bottom:10px; line-height:1.6; }
         .a4-sheet .a4-table td.cell.on { background:#EAF1FE; }
         .a4-sheet .a4-table tr:hover td { background:inherit; }
 
@@ -401,6 +427,7 @@ export default function VendorAnnualEval({ isAdmin, userName }) {
           body.print-annual .a4-sheet .a4-table td.cell.on { background:#fff; }
           body.print-annual .sig-pad { border-color:transparent; background:transparent; }
           body.print-annual .a4-sheet input.a4-input::placeholder { color:transparent; }
+          body.print-annual .a4-sheet input.a4-input, body.print-annual .a4-sheet textarea.a4-lines { background-color:transparent; }
           body.print-annual .print-only-inline { display:inline-block; }
         }
       `}</style>

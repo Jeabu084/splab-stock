@@ -196,7 +196,7 @@ export default function TabVendor() {
       )}
 
       <div className="vendor-annual-host">
-        <VendorAnnualEval isAdmin={user?.role==='admin'} userName={user?.full_name} />
+        <VendorAnnualEval isAdmin={user?.role==='admin'} userName={user?.full_name} criteria={SCORE_LABELS} />
       </div>
 
       {modalBill && (

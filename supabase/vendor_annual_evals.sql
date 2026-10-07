@@ -1,21 +1,23 @@
--- แบบประเมินผู้ขายประจำปี (FM-LA-019)
--- รันครั้งเดียวใน Supabase Dashboard → SQL Editor
+-- สรุปประเมินผู้ขายประจำปี (รวมผลประเมินรายบิลในปีงบ)
+-- รันใน Supabase Dashboard → SQL Editor
+-- หมายเหตุ: drop ตารางเวอร์ชันแรก (ยังไม่มีข้อมูล) แล้วสร้างใหม่
 
-create table if not exists vendor_annual_evals (
+drop table if exists vendor_annual_evals;
+
+create table vendor_annual_evals (
   id                 bigserial primary key,
   vendor_id          bigint not null references vendors(id),
   fiscal_year        int    not null,               -- ปีงบ ค.ศ. เช่น 2026 = ต.ค.2025–ก.ย.2026
-  s1  int check (s1  in (2,4,6,8,10)),
-  s2  int check (s2  in (2,4,6,8,10)),
-  s3  int check (s3  in (2,4,6,8,10)),
-  s4  int check (s4  in (2,4,6,8,10)),
-  s5  int check (s5  in (2,4,6,8,10)),
-  s6  int check (s6  in (2,4,6,8,10)),
-  s7  int check (s7  in (2,4,6,8,10)),
-  s8  int check (s8  in (2,4,6,8,10)),
-  s9  int check (s9  in (2,4,6,8,10)),
-  s10 int check (s10 in (2,4,6,8,10)),
-  total              int  not null,
+  bill_count         int    not null,               -- จำนวนบิลที่นำมาสรุป
+  avg_delivery       numeric(3,2),                  -- ค่าเฉลี่ยรายหัวข้อ (1–5) ณ วันที่สรุป
+  avg_leadtime       numeric(3,2),
+  avg_expiry         numeric(3,2),
+  avg_coldchain      numeric(3,2),
+  avg_quality        numeric(3,2),
+  avg_defect         numeric(3,2),
+  avg_service        numeric(3,2),
+  total_avg          numeric(4,2) not null,         -- เต็ม 35
+  pct                numeric(5,2) not null,
   passed             boolean not null,
   suggestion         text,
   evaluator_name     text,
